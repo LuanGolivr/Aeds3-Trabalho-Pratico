@@ -2,6 +2,7 @@ import java.io.IOException;
 import java.util.Scanner;
 import model.Song;
 import service.RecordService;
+import storage.BinaryRecordFile;
 
 public class App {
     private static final String SONGS_FILE_PATH = "files/songs.bin";
@@ -11,6 +12,8 @@ public class App {
 
     public static void main(String[] args) throws IOException {
         scanner = new Scanner(System.in);
+        // cria o arquivo vazio se ele ainda não existir
+        service = new RecordService<>(new BinaryRecordFile<>(SONGS_FILE_PATH, Song::fromBytes));
         displayMenu();
     }
 
