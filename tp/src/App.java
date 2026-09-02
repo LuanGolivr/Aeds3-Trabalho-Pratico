@@ -1,16 +1,22 @@
+import input.SongInputReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Scanner;
-import input.SongInputReader;
 import model.Song;
 import service.RecordService;
+import sort.ExternalSort;
+import sort.Tape;
 import storage.BinaryRecordFile;
 
 public class App {
     private static final String SONGS_FILE_PATH = "files/songs.bin";
     private static final String DATASET_PATH = "dataset/Spotify Most Streamed Songs.csv";
+    private static final String SORT_WORK_DIR = "files/sort_tmp";
+    private static final int SORT_HEAP_CAPACITY = 50;
+    private static final int SORT_MERGE_WAYS = 3;
 
     private static Scanner scanner;
     private static SongInputReader inputReader;
@@ -33,6 +39,7 @@ public class App {
             System.out.println("3 - Buscar registro");
             System.out.println("4 - Atualizar registro");
             System.out.println("5 - Deletar registro");
+            System.out.println("6 - Ordenar registros");
             System.out.println("0 - Sair do programa");
 
             option = inputReader.readMenuOption();
@@ -51,6 +58,9 @@ public class App {
                     break;
                 case 5:
                     deleteRecord();
+                    break;
+                case 6:
+                    sortRecords();
                     break;
                 case 0:
                     System.out.println("Finalizando programa....");
@@ -116,5 +126,34 @@ public class App {
 
     private static void deleteRecord() throws IOException {
         //int id = inputReader.readId();
+    }
+
+    private static void sortRecords() throws IOException {
+        List<Song> songs = service.readAll();
+        if (songs.isEmpty()) {
+            System.out.println("Não há registros para ordenar.");
+            return;
+        }
+
+        Files.createDirectories(Path.of(SORT_WORK_DIR));
+        ExternalSort<Song> sorter = new ExternalSort<>(
+                SORT_HEAP_CAPACITY,
+                SORT_MERGE_WAYS,
+                Comparator.comparingLong(Song::streams),
+                Song::fromBytes,
+                SORT_WORK_DIR);
+
+        Tape<Song> sorted = sorter.sort(songs.iterator());
+        try {
+            System.out.println("Registros ordenados por número de streams:");
+            int position = 1;
+            Song song;
+            while ((song = sorted.read()) != null) {
+                System.out.println(position++ + " - " + song);
+            }
+        } finally {
+            sorted.close();
+            sorted.delete();
+        }
     }
 }

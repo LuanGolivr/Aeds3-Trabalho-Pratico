@@ -4,6 +4,8 @@ import interfaces.RecordFile;
 import interfaces.Recordable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
 
 // ponytail: linear scan per operation (O(n)); upgrade to an id->offset index if lookups get slow
@@ -63,6 +65,24 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     @Override
     public T read(int id) throws IOException {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<T> readAll() throws IOException {
+        List<T> records = new ArrayList<>();
+        this.file.seek(Header.SIZE_IN_BYTES);
+
+        while (this.file.getFilePointer() < this.file.length()) {
+            byte tombstone = this.file.readByte();
+            int length = this.file.readInt();
+            byte[] data = new byte[length];
+            this.file.readFully(data);
+
+            if (tombstone != TOMBSTONE_DELETED) {
+                records.add(this.deserializer.apply(data));
+            }
+        }
+        return records;
     }
 
     @Override
