@@ -30,17 +30,21 @@ public class App {
         displayMenu();
     }
 
+    private static final String[] MENU_ITEMS = {
+        "1 - Carregar base de dados",
+        "2 - Adicionar novo registro",
+        "3 - Buscar registro",
+        "4 - Atualizar registro",
+        "5 - Deletar registro",
+        "6 - Ordenar registros",
+        "0 - Sair do programa",
+    };
+
     public static void displayMenu() throws IOException {
         int option;
 
         do {
-            System.out.println("1 - Carregar base de dados");
-            System.out.println("2 - Adicionar novo registro");
-            System.out.println("3 - Buscar registro");
-            System.out.println("4 - Atualizar registro");
-            System.out.println("5 - Deletar registro");
-            System.out.println("6 - Ordenar registros");
-            System.out.println("0 - Sair do programa");
+            printMenu("Spotify Songs Manager", MENU_ITEMS);
 
             option = inputReader.readMenuOption();
             switch (option) {
@@ -69,6 +73,32 @@ public class App {
                     System.out.println("Opção inválida.");
             }
         } while (option != 0);
+    }
+
+    private static void printMenu(String title, String[] items) {
+        int width = title.length();
+        for (String item : items) {
+            width = Math.max(width, item.length());
+        }
+        width += 2; // margem de 1 espaço de cada lado
+
+        System.out.println("\n╔" + "═".repeat(width) + "╗");
+        System.out.println("║" + center(title, width) + "║");
+        System.out.println("╠" + "═".repeat(width) + "╣");
+        for (String item : items) {
+            System.out.println("║ " + padRight(item, width - 1) + "║");
+        }
+        System.out.println("╚" + "═".repeat(width) + "╝");
+    }
+
+    private static String center(String text, int width) {
+        int left = (width - text.length()) / 2;
+        int right = width - text.length() - left;
+        return " ".repeat(left) + text + " ".repeat(right);
+    }
+
+    private static String padRight(String text, int width) {
+        return text + " ".repeat(Math.max(0, width - text.length()));
     }
 
     private static void loadDatabase() throws IOException {
