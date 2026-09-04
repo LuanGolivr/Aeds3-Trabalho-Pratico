@@ -147,15 +147,48 @@ public class App {
     }
 
     private static void searchRecord() throws IOException {
-        //int id = inputReader.readId();
+        int id = inputReader.readId();
+        Song song = service.search(id);
+        
+        if (song != null) {
+            System.out.println("Registro encontrado:");
+            System.out.println(song.toString());
+        }
+        else {
+            System.out.println("Erro: Registro com o id [" + id + "] não encontrado.");
+        }
     }
 
     private static void updateRecord() throws IOException {
-        //int id = inputReader.readId();
+        int id = inputReader.readId();
+        Song existingSong = service.search(id);
+        
+        if (existingSong == null) {
+            System.out.println("Erro: Registro com o id [" + id + "] não encontrado para atualização.");
+            return;
+        }
+        
+        System.out.println("Registro atual encontrado. Insira os novos dados abaixo:");
+        // Chama o método readSong() passando o mesmo ID, para gerar o objeto com os novos atributos
+        Song updatedSong = inputReader.readSong(id); 
+        
+        if (service.update(updatedSong)) {
+            System.out.println("Registro atualizado com sucesso.");
+        }
+        else {
+            System.out.println("Falha ao atualizar o registro.");
+        }
     }
 
     private static void deleteRecord() throws IOException {
-        //int id = inputReader.readId();
+        int id = inputReader.readId();
+        
+        if (service.delete(id)) {
+            System.out.println("Registro deletado com sucesso.");
+        }
+        else {
+            System.out.println("Erro: Registro com o id [" + id + "] não encontrado para deleção.");
+        }
     }
 
     private static void sortRecords() throws IOException {
