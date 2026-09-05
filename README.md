@@ -7,9 +7,20 @@ O código-fonte, o dataset e as instruções detalhadas ficam em [`tp/`](tp/READ
 
 ## Como compilar e rodar
 
+Linux/macOS:
+
 ```bash
 cd tp
 javac -d bin $(find src -name "*.java")
+java -cp bin App
+```
+
+Windows (cmd):
+
+```bat
+cd tp
+dir /s /b src\*.java > sources.txt
+javac -d bin @sources.txt
 java -cp bin App
 ```
 
