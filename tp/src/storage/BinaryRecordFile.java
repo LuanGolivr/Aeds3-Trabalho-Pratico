@@ -5,6 +5,8 @@ import interfaces.Recordable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -21,6 +23,10 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     private Header header;
 
     public BinaryRecordFile(String filePath, Function<byte[], T> deserializer) throws IOException {
+        Path parent = Path.of(filePath).toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
         this.file = new RandomAccessFile(filePath, "rw");
         this.deserializer = deserializer;
         createHeader();
