@@ -5,8 +5,18 @@ externa (seleção por substituição + intercalação polifásica) sobre os reg
 
 ## Como compilar e rodar
 
+Linux/macOS:
+
 ```bash
 javac -d bin $(find src -name "*.java")
+java -cp bin App
+```
+
+Windows (cmd):
+
+```bat
+dir /s /b src\*.java > sources.txt
+javac -d bin @sources.txt
 java -cp bin App
 ```
 
