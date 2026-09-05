@@ -13,7 +13,8 @@ java -cp bin App
 ## Dataset
 
 `dataset/Spotify Most Streamed Songs.csv` — carregado pela opção 1 do menu, que grava cada
-linha como um registro em `files/songs.bin` (arquivo binário, ignorado pelo git).
+linha como um registro em `files/songs.bin` (arquivo binário, ignorado pelo git). Linhas com
+campo numérico corrompido são puladas e contadas no resumo final.
 
 ## Estrutura do projeto
 
@@ -27,6 +28,16 @@ src/
 ├── input/              # SongInputReader — leitura dos dados via terminal
 └── sort/                # ordenação externa (ver seção abaixo)
 ```
+
+## CRUD (opções 1-5 do menu)
+
+`BinaryRecordFile` implementa `create`, `read`, `update` (delete + create do mesmo id) e
+`delete` (lógico, via lápide `'*'`), com contador de próximo id e quantidade de registros
+ativos persistidos num header de 8 bytes no início do arquivo.
+
+Além do `readAll()` (carrega tudo em uma `List`), há `iterator()`: lê os registros válidos um
+por vez direto do disco, sem materializar a base inteira em memória — é o que a ordenação
+externa usa como entrada.
 
 ## Ordenação externa (opção 6 do menu)
 
@@ -43,17 +54,20 @@ Implementada em `src/sort/`, em duas fases:
 - **`ExternalSort`** — fachada que encadeia as duas fases; recebe um `Iterator<T>` de entrada e
   devolve uma `Tape<T>` com os registros em ordem.
 
-No menu, a opção 6 ordena os registros por número de streams (`Song::streams`). O tamanho do
-heap e o número de fitas de entrada (`ways`) são constantes ajustáveis em `App.java`
-(`SORT_HEAP_CAPACITY`, `SORT_MERGE_WAYS`).
+No menu, a opção 6 ordena os registros por número de streams (`Song::streams`). O número de
+caminhos (fitas, `ways`) e a quantidade máxima de registros por vez em memória primária (tamanho
+do heap) são perguntados ao usuário a cada execução — não são mais constantes fixas no código.
+
+Depois de exibir o resultado, a ordenação **substitui** `files/songs.bin` pela versão ordenada:
+como a leitura de entrada (`iterator()`) já ignora registros deletados/desatualizados, o novo
+arquivo sai compactado, sem os "espaços em branco" deixados por deleções e updates anteriores.
+O contador de próximo id é preservado; as operações de CRUD seguintes já passam a atuar nesse
+novo arquivo.
 
 ## Status / limitações conhecidas
 
-O CRUD ainda está em desenvolvimento:
-
-- `BinaryRecordFile.read(id)`, `update()` e `delete()` ainda não estão implementados (lançam
-  `UnsupportedOperationException`) — por isso as opções 3, 4 e 5 do menu ainda não funcionam.
-- `create()` chama `read(id)` internamente para checar duplicata, então as opções 1 (carregar
-  base de dados) e 2 (adicionar registro) também ficam bloqueadas até `read()` ser implementado.
-- `readAll()` (usado pela ordenação) não depende de `read(id)` e já funciona — mas, com o
-  bloqueio acima, o arquivo `files/songs.bin` só pode ser populado manualmente por enquanto.
+- Toda busca por id (`read`, `update`, `delete`) é uma varredura linear O(n) do arquivo — não há
+  índice id→offset. Upgrade sugerido se isso virar gargalo: manter um `Map<Integer, Long>` (ou
+  estrutura em disco) de id para offset.
+- `interfaces.RecordInput` existe no código mas não é implementada por `SongInputReader` — é uma
+  interface órfã, sem impacto funcional hoje.
