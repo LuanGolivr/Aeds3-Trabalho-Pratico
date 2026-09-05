@@ -111,24 +111,29 @@ public class App {
         }
 
         List<String> lines = Files.readAllLines(Path.of(DATASET_PATH));
+        int skipped = 0;
         for (String line : lines.subList(1, lines.size())) { // pula o cabeçalho
             String[] fields = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
 
-            int id = service.nextId();
-            Song song = new Song(
-                    id,
-                    unquote(fields[0]),
-                    unquote(fields[1]).split("\\s*,\\s*"),
-                    Integer.parseInt(fields[3]),
-                    Integer.parseInt(fields[4]),
-                    Integer.parseInt(fields[5]),
-                    Integer.parseInt(fields[6]),
-                    Long.parseLong(fields[8]),
-                    Integer.parseInt(fields[14]),
-                    unquote(fields[16]));
-            service.create(song);
+            try {
+                int id = service.nextId();
+                Song song = new Song(
+                        id,
+                        unquote(fields[0]),
+                        unquote(fields[1]).split("\\s*,\\s*"),
+                        Integer.parseInt(fields[3]),
+                        Integer.parseInt(fields[4]),
+                        Integer.parseInt(fields[5]),
+                        Integer.parseInt(fields[6]),
+                        Long.parseLong(fields[8]),
+                        Integer.parseInt(fields[14]),
+                        unquote(fields[16]));
+                service.create(song);
+            } catch (NumberFormatException e) {
+                skipped++; // linha com dado corrompido no dataset original (ex: campo "streams" inválido)
+            }
         }
-        System.out.println("Base de dados carregada com sucesso.");
+        System.out.println("Base de dados carregada com sucesso." + (skipped > 0 ? " (" + skipped + " linha(s) corrompida(s) ignorada(s))" : ""));
     }
 
     private static String unquote(String field) {
