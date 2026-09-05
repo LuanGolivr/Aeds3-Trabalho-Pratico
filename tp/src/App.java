@@ -3,6 +3,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 import model.Song;
@@ -15,8 +16,6 @@ public class App {
     private static final String SONGS_FILE_PATH = "files/songs.bin";
     private static final String DATASET_PATH = "dataset/Spotify Most Streamed Songs.csv";
     private static final String SORT_WORK_DIR = "files/sort_tmp";
-    private static final int SORT_HEAP_CAPACITY = 50;
-    private static final int SORT_MERGE_WAYS = 3;
 
     private static Scanner scanner;
     private static SongInputReader inputReader;
@@ -148,7 +147,8 @@ public class App {
         int id = service.nextId();
         Song song = inputReader.readSong(id);
         service.create(song);
-        System.out.println("Registro adicionado com sucesso.");
+        System.out.println("Registro adicionado com sucesso:");
+        System.out.println(song);
     }
 
     private static void searchRecord() throws IOException {
@@ -197,21 +197,24 @@ public class App {
     }
 
     private static void sortRecords() throws IOException {
-        List<Song> songs = service.readAll();
-        if (songs.isEmpty()) {
+        Iterator<Song> songs = service.iterator();
+        if (!songs.hasNext()) {
             System.out.println("Não há registros para ordenar.");
             return;
         }
 
+        int ways = inputReader.readSortWays();
+        int heapCapacity = inputReader.readSortHeapCapacity();
+
         Files.createDirectories(Path.of(SORT_WORK_DIR));
         ExternalSort<Song> sorter = new ExternalSort<>(
-                SORT_HEAP_CAPACITY,
-                SORT_MERGE_WAYS,
+                heapCapacity,
+                ways,
                 Comparator.comparingLong(Song::streams),
                 Song::fromBytes,
                 SORT_WORK_DIR);
 
-        Tape<Song> sorted = sorter.sort(songs.iterator());
+        Tape<Song> sorted = sorter.sort(songs);
         try {
             System.out.println("Registros ordenados por número de streams:");
             int position = 1;

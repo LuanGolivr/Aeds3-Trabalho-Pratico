@@ -4,7 +4,9 @@ import interfaces.RecordFile;
 import interfaces.Recordable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 
@@ -104,6 +106,43 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
             }
         }
         return records;
+    }
+
+    @Override
+    public Iterator<T> iterator() throws IOException {
+        this.file.seek(Header.SIZE_IN_BYTES);
+        return new Iterator<T>() {
+            private T next = advance();
+
+            private T advance() {
+                try {
+                    while (file.getFilePointer() < file.length()) {
+                        byte tombstone = file.readByte();
+                        int length = file.readInt();
+                        byte[] data = new byte[length];
+                        file.readFully(data);
+                        if (tombstone != TOMBSTONE_DELETED) {
+                            return deserializer.apply(data);
+                        }
+                    }
+                    return null;
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public boolean hasNext() {
+                return next != null;
+            }
+
+            @Override
+            public T next() {
+                T current = next;
+                next = advance();
+                return current;
+            }
+        };
     }
 
     @Override

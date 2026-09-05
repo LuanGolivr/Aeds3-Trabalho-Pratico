@@ -22,6 +22,16 @@ public class SongInputReader {
         return scanner.nextInt();
     }
 
+    public int readSortWays() {
+        System.out.println("Número de caminhos (fitas) para a ordenação externa:");
+        return scanner.nextInt();
+    }
+
+    public int readSortHeapCapacity() {
+        System.out.println("Número máximo de registros por ordenação em memória primária:");
+        return scanner.nextInt();
+    }
+
     public Song readSong(int id) {
         System.out.println("Nome da faixa:");
         scanner.nextLine();

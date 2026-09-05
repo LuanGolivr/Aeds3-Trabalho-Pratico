@@ -1,6 +1,7 @@
 package service;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.List;
 
 import interfaces.Recordable;
@@ -28,6 +29,10 @@ public class RecordService<T extends Recordable> {
 
     public List<T> readAll() throws IOException {
         return file.readAll();
+    }
+
+    public Iterator<T> iterator() throws IOException {
+        return file.iterator();
     }
 
     public boolean update(T record) throws IOException {
