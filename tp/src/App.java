@@ -107,6 +107,7 @@ public class App {
             if (!scanner.next().equalsIgnoreCase("s")) {
                 return;
             }
+            service.clear();
         }
 
         List<String> lines = Files.readAllLines(Path.of(DATASET_PATH));
@@ -210,13 +211,12 @@ public class App {
         ExternalSort<Song> sorter = new ExternalSort<>(
                 heapCapacity,
                 ways,
-                Comparator.comparingLong(Song::streams),
+                Comparator.comparing(Song::trackName),
                 Song::fromBytes,
                 SORT_WORK_DIR);
 
         Tape<Song> sorted = sorter.sort(songs);
         try {
-            System.out.println("Registros ordenados por número de streams:");
             int position = 1;
             Song song;
             while ((song = sorted.read()) != null) {
@@ -227,6 +227,7 @@ public class App {
             service.replaceAll(sorted.iterator());
             System.out.println(
                     "Arquivo de dados substituído pela versão ordenada e compactada (sem registros deletados/antigos).");
+            System.out.println("Registros ordenados pela TrackName:");
         } finally {
             sorted.close();
             sorted.delete();

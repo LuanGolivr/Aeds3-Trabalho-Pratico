@@ -39,6 +39,10 @@ public class RecordService<T extends Recordable> {
         file.replaceAll(records);
     }
 
+    public void clear() throws IOException {
+        file.clear();
+    }
+
     public boolean update(T record) throws IOException {
         return file.update(record);
     }

@@ -23,6 +23,10 @@ public interface RecordFile<T extends Recordable> {
     // compactado da ordenação externa), preservando a contagem de próximo id
     void replaceAll(Iterator<T> records) throws IOException;
 
+    // apaga todo o conteúdo do arquivo e reseta o header (nextId volta a começar do zero) —
+    // usado ao recarregar a base de dados do zero
+    void clear() throws IOException;
+
     boolean update(T record) throws IOException;
 
     boolean delete(int id) throws IOException;

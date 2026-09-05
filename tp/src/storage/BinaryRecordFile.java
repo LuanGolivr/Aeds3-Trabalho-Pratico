@@ -171,6 +171,14 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     }
 
     @Override
+    public void clear() throws IOException {
+        this.file.setLength(0);
+        this.header = new Header();
+        this.file.seek(0);
+        this.header.writeTo(this.file);
+    }
+
+    @Override
     public boolean update(T record) throws IOException {
         // Deleta o registro atual
         if (delete(record.id())) {
