@@ -146,6 +146,25 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     }
 
     @Override
+    public void replaceAll(Iterator<T> records) throws IOException {
+        this.file.setLength(0);
+        this.file.seek(Header.SIZE_IN_BYTES);
+
+        int count = 0;
+        while (records.hasNext()) {
+            byte[] data = records.next().toBytes();
+            this.file.writeByte(' ');
+            this.file.writeInt(data.length);
+            this.file.write(data);
+            count++;
+        }
+
+        this.header.resetRecordCount(count);
+        this.file.seek(0);
+        this.header.writeTo(this.file);
+    }
+
+    @Override
     public boolean update(T record) throws IOException {
         // Deleta o registro atual
         if (delete(record.id())) {

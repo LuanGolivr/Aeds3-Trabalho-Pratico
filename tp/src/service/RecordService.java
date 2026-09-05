@@ -35,6 +35,10 @@ public class RecordService<T extends Recordable> {
         return file.iterator();
     }
 
+    public void replaceAll(Iterator<T> records) throws IOException {
+        file.replaceAll(records);
+    }
+
     public boolean update(T record) throws IOException {
         return file.update(record);
     }

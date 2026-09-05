@@ -222,6 +222,11 @@ public class App {
             while ((song = sorted.read()) != null) {
                 System.out.println(position++ + " - " + song);
             }
+
+            sorted.rewind();
+            service.replaceAll(sorted.iterator());
+            System.out.println(
+                    "Arquivo de dados substituído pela versão ordenada e compactada (sem registros deletados/antigos).");
         } finally {
             sorted.close();
             sorted.delete();
