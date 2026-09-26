@@ -1,7 +1,8 @@
 # Trabalho Prático - AEDS3
 
 CRUD de músicas do Spotify em arquivo binário, rodando no terminal, em Java, com ordenação
-externa (seleção por substituição + intercalação polifásica) sobre os registros.
+externa (seleção por substituição + intercalação polifásica) e índice em Árvore B+ sobre o id
+dos registros.
 
 ## Como compilar e rodar
 
@@ -24,7 +25,8 @@ java -cp bin App
 
 `dataset/Spotify Most Streamed Songs.csv` — carregado pela opção 1 do menu, que grava cada
 linha como um registro em `files/songs.bin` (arquivo binário, ignorado pelo git). Linhas com
-campo numérico corrompido são puladas e contadas no resumo final.
+campo numérico corrompido são puladas e contadas no resumo final. O índice, quando construído,
+fica em `files/songs.idx` (também ignorado pelo git — é derivado do `.bin`, dá pra reconstruir).
 
 ## Estrutura do projeto
 
@@ -32,10 +34,11 @@ campo numérico corrompido são puladas e contadas no resumo final.
 src/
 ├── App.java          # menu e ponto de entrada
 ├── model/             # Song — dado de domínio, serialização (toBytes/fromBytes)
-├── interfaces/         # Recordable, RecordFile, RecordInput
+├── interfaces/         # Recordable, RecordFile, RecordInput, Index
 ├── storage/            # BinaryRecordFile + Header — persistência em arquivo binário
 ├── service/            # RecordService — camada entre o menu e o armazenamento
 ├── input/              # SongInputReader — leitura dos dados via terminal
+├── index/              # índice em Árvore B+ sobre o id (ver seção abaixo)
 └── sort/                # ordenação externa (ver seção abaixo)
 ```
 
@@ -48,6 +51,45 @@ ativos persistidos num header de 8 bytes no início do arquivo.
 Além do `readAll()` (carrega tudo em uma `List`), há `iterator()`: lê os registros válidos um
 por vez direto do disco, sem materializar a base inteira em memória — é o que a ordenação
 externa usa como entrada.
+
+## Índice em Árvore B+ (opção 7 do menu)
+
+Arquivo separado (`files/songs.idx`), chave `id -> posição no songs.bin`.
+
+**Por que Árvore B+ e não B ou B\***: numa B tradicional cada nó (raiz, internos e folhas) guarda
+a posição do registro junto da chave, mesmo nos níveis que só servem de roteamento — isso
+desperdiça espaço e reduz quantas chaves cabem por nó. Na B+ só as folhas guardam a posição; os
+nós internos guardam somente chaves separadoras, cabem mais por nó, a árvore fica mais rasa e
+busca menos páginas em disco. B\* melhora ainda mais a ocupação redistribuindo antes de dividir,
+mas é uma complexidade de implementação sem ganho real pro tamanho da base aqui — a política de
+remoção da B+ já garante pelo menos 50% de ocupação por nó (ver abaixo).
+
+Implementação em `src/index/`:
+- **`IndexHeader`** — cabeçalho do `.idx`: ordem (definida na criação/reconstrução do índice,
+  nunca muda depois), offset do nó raiz, offset livre pro próximo nó.
+- **`Node`** — nó de tamanho fixo em disco, calculado a partir da ordem, endereçável só por
+  aritmética de offset (sem precisar de um índice à parte pra achar nós). As folhas ficam
+  encadeadas entre si (não usado hoje, já que a busca é só por id exato, mas deixa pronta uma
+  busca por faixa futura sem redesenhar nada).
+- **`BPlusTreeIndex`** — busca (`O(log n)` acessos a disco em vez do `O(n)` da varredura linear),
+  inserção com split (propagando até criar uma raiz nova se preciso) e remoção com
+  redistribuição/fusão de nós (pega emprestado de um irmão com sobra, ou funde com um irmão se
+  nenhum tiver — mantém a ocupação mínima de 50% por nó, exceto a raiz).
+
+A ordem é perguntada só na criação/reconstrução do índice e fica salva no próprio `.idx` — não
+precisa ser informada de novo nas próximas execuções, o índice é recarregado do disco
+automaticamente se já existir. Reconstruir um índice existente pede confirmação antes de
+sobrescrever.
+
+O índice é opcional e transparente: `BinaryRecordFile` recebe um `Index<Integer>` que pode ser
+`null`. Sem índice, `create`/`read`/`delete` caem pra varredura linear, como antes de essa
+funcionalidade existir. Com índice, toda alteração no `songs.bin` atualiza o `.idx` no mesmo
+momento (nunca fica desatualizado), e cada operação do menu (3 a 5) indica no terminal qual
+estrutura resolveu ela.
+
+`interfaces.Index<K>` já deixa o encaixe pronto pra Hashing Dinâmico e Lista Invertida — na opção
+7 do menu já dá pra escolher o tipo, mas por enquanto só a Árvore B+ está implementada; as outras
+duas avisam que ainda não foram feitas.
 
 ## Ordenação externa (opção 6 do menu)
 
@@ -76,8 +118,11 @@ novo arquivo.
 
 ## Status / limitações conhecidas
 
-- Toda busca por id (`read`, `update`, `delete`) é uma varredura linear O(n) do arquivo — não há
-  índice id→offset. Upgrade sugerido se isso virar gargalo: manter um `Map<Integer, Long>` (ou
-  estrutura em disco) de id para offset.
+- Sem o índice construído, busca/atualização/deleção por id ainda são varredura linear O(n) do
+  arquivo. Construir o índice (opção 7) resolve, passando pra O(log n).
+- O arquivo de índice nunca reaproveita espaço de nós descartados (por fusão numa remoção) — só
+  cresce. Reconstruir o índice do zero (opção 7) resolve, se isso virar problema.
+- Hashing Dinâmico e Lista Invertida ainda não foram implementados — o menu já pergunta qual tipo
+  de índice criar, mas só a Árvore B+ está disponível por enquanto.
 - `interfaces.RecordInput` existe no código mas não é implementada por `SongInputReader` — é uma
   interface órfã, sem impacto funcional hoje.

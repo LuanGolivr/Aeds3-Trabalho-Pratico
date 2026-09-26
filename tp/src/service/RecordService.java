@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 
+import interfaces.Index;
 import interfaces.Recordable;
 import interfaces.RecordFile;
 
@@ -49,5 +50,13 @@ public class RecordService<T extends Recordable> {
 
     public boolean delete(int id) throws IOException {
         return file.delete(id);
+    }
+
+    public void attachIndex(Index<Integer> index) throws IOException {
+        file.attachIndex(index);
+    }
+
+    public String activeIndexLabel() {
+        return file.activeIndexLabel();
     }
 }

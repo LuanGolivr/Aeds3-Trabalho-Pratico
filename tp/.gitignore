@@ -1,3 +1,4 @@
 bin/
 files/*.bin
+files/*.idx
 files/sort_tmp/

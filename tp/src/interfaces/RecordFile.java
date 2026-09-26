@@ -30,4 +30,11 @@ public interface RecordFile<T extends Recordable> {
     boolean update(T record) throws IOException;
 
     boolean delete(int id) throws IOException;
+
+    // reconstrói o índice do zero varrendo o arquivo de dados e passa a usá-lo nas operações
+    // seguintes (create/read/update/delete), substituindo o índice ativo anterior, se houver
+    void attachIndex(Index<Integer> index) throws IOException;
+
+    // "Árvore B+ (ordem N)" com índice ativo, ou "nenhum (varredura linear)" sem índice
+    String activeIndexLabel();
 }

@@ -1,4 +1,6 @@
+import index.BPlusTreeIndex;
 import input.SongInputReader;
+import interfaces.Index;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +16,7 @@ import storage.BinaryRecordFile;
 
 public class App {
     private static final String SONGS_FILE_PATH = "files/songs.bin";
+    private static final String INDEX_FILE_PATH = "files/songs.idx";
     private static final String DATASET_PATH = "dataset/Spotify Most Streamed Songs.csv";
     private static final String SORT_WORK_DIR = "files/sort_tmp";
 
@@ -24,8 +27,11 @@ public class App {
     public static void main(String[] args) throws IOException {
         scanner = new Scanner(System.in);
         inputReader = new SongInputReader(scanner);
+
+        // se já existe um índice construído em execuções anteriores, carrega e usa direto
+        Index<Integer> index = Files.exists(Path.of(INDEX_FILE_PATH)) ? BPlusTreeIndex.open(INDEX_FILE_PATH) : null;
         // cria o arquivo vazio se ele ainda não existir
-        service = new RecordService<>(new BinaryRecordFile<>(SONGS_FILE_PATH, Song::fromBytes));
+        service = new RecordService<>(new BinaryRecordFile<>(SONGS_FILE_PATH, Song::fromBytes, index));
         displayMenu();
     }
 
@@ -36,6 +42,7 @@ public class App {
         "4 - Atualizar registro",
         "5 - Deletar registro",
         "6 - Ordenar registros",
+        "7 - Criar/reconstruir índice",
         "0 - Sair do programa",
     };
 
@@ -64,6 +71,9 @@ public class App {
                     break;
                 case 6:
                     sortRecords();
+                    break;
+                case 7:
+                    buildIndex();
                     break;
                 case 0:
                     System.out.println("Finalizando programa....");
@@ -148,6 +158,7 @@ public class App {
         int id = service.nextId();
         Song song = inputReader.readSong(id);
         service.create(song);
+        System.out.println("(criação via " + service.activeIndexLabel() + ")");
         System.out.println("Registro adicionado com sucesso:");
         System.out.println(song);
     }
@@ -155,7 +166,8 @@ public class App {
     private static void searchRecord() throws IOException {
         int id = inputReader.readId();
         Song song = service.search(id);
-        
+
+        System.out.println("(busca via " + service.activeIndexLabel() + ")");
         if (song != null) {
             System.out.println("Registro encontrado:");
             System.out.println(song.toString());
@@ -168,7 +180,8 @@ public class App {
     private static void updateRecord() throws IOException {
         int id = inputReader.readId();
         Song existingSong = service.search(id);
-        
+        System.out.println("(atualização via " + service.activeIndexLabel() + ")");
+
         if (existingSong == null) {
             System.out.println("Erro: Registro com o id [" + id + "] não encontrado para atualização.");
             return;
@@ -188,13 +201,34 @@ public class App {
 
     private static void deleteRecord() throws IOException {
         int id = inputReader.readId();
-        
+        System.out.println("(remoção via " + service.activeIndexLabel() + ")");
+
         if (service.delete(id)) {
             System.out.println("Registro deletado com sucesso.");
         }
         else {
             System.out.println("Erro: Registro com o id [" + id + "] não encontrado para deleção.");
         }
+    }
+
+    private static void buildIndex() throws IOException {
+        int type = inputReader.readIndexTypeOption();
+        if (type != 1) {
+            System.out.println("Esse tipo de índice ainda não foi implementado.");
+            return;
+        }
+
+        if (Files.exists(Path.of(INDEX_FILE_PATH))) {
+            System.out.println("Já existe um índice. Reconstruí-lo vai sobrescrever o arquivo atual. Continuar? (s/n)");
+            if (!scanner.next().equalsIgnoreCase("s")) {
+                return;
+            }
+        }
+
+        int order = inputReader.readIndexOrder();
+        Index<Integer> index = BPlusTreeIndex.create(INDEX_FILE_PATH, order);
+        service.attachIndex(index);
+        System.out.println("Índice construído com sucesso: " + service.activeIndexLabel());
     }
 
     private static void sortRecords() throws IOException {
