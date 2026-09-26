@@ -1,7 +1,8 @@
 # AEDS3 — Trabalho Prático
 
 CRUD de músicas do Spotify em arquivo binário, rodando no terminal em Java, com ordenação
-externa (seleção por substituição + intercalação polifásica) sobre os registros.
+externa (seleção por substituição + intercalação polifásica) e índice em Árvore B+ sobre o id
+dos registros.
 
 O código-fonte, o dataset e as instruções detalhadas ficam em [`tp/`](tp/README.md).
 
