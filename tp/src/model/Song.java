@@ -65,6 +65,14 @@ public class Song implements Recordable {
         return id;
     }
 
+    public long streams() {
+        return streams;
+    }
+    
+    public String trackName(){
+        return trackName;
+    }
+
     @Override
     public byte[] toBytes() {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

@@ -22,6 +22,29 @@ public class SongInputReader {
         return scanner.nextInt();
     }
 
+    public int readSortWays() {
+        System.out.println("Número de caminhos (fitas) para a ordenação externa:");
+        return scanner.nextInt();
+    }
+
+    public int readSortHeapCapacity() {
+        System.out.println("Número máximo de registros por ordenação em memória primária:");
+        return scanner.nextInt();
+    }
+
+    public int readIndexTypeOption() {
+        System.out.println("Qual tipo de índice deseja criar?");
+        System.out.println("1 - Árvore B+");
+        System.out.println("2 - Hashing Dinâmico");
+        System.out.println("3 - Lista Invertida");
+        return scanner.nextInt();
+    }
+
+    public int readIndexOrder() {
+        System.out.println("Ordem da árvore B+ (mínimo 3):");
+        return scanner.nextInt();
+    }
+
     public Song readSong(int id) {
         System.out.println("Nome da faixa:");
         scanner.nextLine();

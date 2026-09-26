@@ -33,6 +33,11 @@ public class Header {
         recordCount--;
     }
 
+    // usado depois de reescrever o arquivo do zero (ex.: compactação pela ordenação externa)
+    public void resetRecordCount(int count) {
+        this.recordCount = count;
+    }
+
     public void writeTo(RandomAccessFile file) throws IOException {
         file.writeInt(lastId);
         file.writeInt(recordCount);
