@@ -64,7 +64,7 @@ public class ExtendibleHashIndex implements Index<Integer> {
         return "Hashing Estendido (Capacidade: " + bucketCapacity + " registros/bucket)";
     }
 
-    // Função Hash exigida: h(k) = k mod 2^p
+    // h(k) = k mod 2^p
     private int hash(int key, int depth) {
         return key % (1 << depth); 
     }
