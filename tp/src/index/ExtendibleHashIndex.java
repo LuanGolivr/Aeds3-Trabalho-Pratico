@@ -125,7 +125,6 @@ public class ExtendibleHashIndex implements Index<Integer> {
         int newKeyHash = hash(newKey, newLocalDepth);
         if (newKeyHash == hash(newKey, bucket.localDepth)) {
             if (bucket0.count < bucketCapacity) bucket0.insert(newKey, newPosition);
-            else { /* Tratamento de colisão extrema ignorado para simplicidade acadêmica */ }
         } else {
             if (bucket1.count < bucketCapacity) bucket1.insert(newKey, newPosition);
         }

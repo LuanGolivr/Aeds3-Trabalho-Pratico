@@ -141,7 +141,7 @@ public class InvertedList {
         return result;
     }
 
-    // FUNÇÃO OBRIGATÓRIA DO TRABALHO: Busca composta usando duas listas invertidas
+    // Busca composta usando duas listas invertidas
     public static List<Integer> intersect(List<Integer> list1, List<Integer> list2) {
         List<Integer> result = new ArrayList<>();
         // O HashSet torna a verificação extremamente rápida (Complexidade O(1) por elemento)

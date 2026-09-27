@@ -10,7 +10,7 @@ class HashDirectory {
     
     HashDirectory(int globalDepth) {
         this.globalDepth = globalDepth;
-        int size = 1 << globalDepth; // 2^p
+        int size = 1 << globalDepth;
         this.bucketOffsets = new long[size];
     }
 
