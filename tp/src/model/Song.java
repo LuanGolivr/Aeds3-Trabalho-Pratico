@@ -60,6 +60,14 @@ public class Song implements Recordable {
         this.mode = String.format("%-" + MODE_LENGTH + "s", mode).substring(0, MODE_LENGTH).toCharArray();
     }
 
+    public String[] getArtistsName() {
+        return artistsName;
+    }
+
+    public LocalDate getReleasedDate() {
+        return releasedDate;
+    }
+
     @Override
     public int id() {
         return id;

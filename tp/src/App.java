@@ -1,4 +1,6 @@
 import index.BPlusTreeIndex;
+import index.ExtendibleHashIndex;
+import index.InvertedList;
 import input.SongInputReader;
 import interfaces.Index;
 import java.io.IOException;
@@ -23,10 +25,15 @@ public class App {
     private static Scanner scanner;
     private static SongInputReader inputReader;
     private static RecordService<Song> service;
+    private static InvertedList artistList;
+    private static InvertedList yearList;
 
     public static void main(String[] args) throws IOException {
         scanner = new Scanner(System.in);
         inputReader = new SongInputReader(scanner);
+
+        artistList = new InvertedList("files/artist");
+        yearList = new InvertedList("files/year");
 
         // se já existe um índice construído em execuções anteriores, carrega e usa direto
         Index<Integer> index = Files.exists(Path.of(INDEX_FILE_PATH)) ? BPlusTreeIndex.open(INDEX_FILE_PATH) : null;
@@ -37,12 +44,13 @@ public class App {
 
     private static final String[] MENU_ITEMS = {
         "1 - Carregar base de dados",
-        "2 - Adicionar novo registro",
-        "3 - Buscar registro",
-        "4 - Atualizar registro",
-        "5 - Deletar registro",
-        "6 - Ordenar registros",
+        "2 - Adicionar novo registo",
+        "3 - Buscar registo (Chave Primária)",
+        "4 - Atualizar registo",
+        "5 - Deletar registo",
+        "6 - Ordenar registos",
         "7 - Criar/reconstruir índice",
+        "8 - Buscar por atributos (Lista Invertida)",
         "0 - Sair do programa",
     };
 
@@ -74,6 +82,9 @@ public class App {
                     break;
                 case 7:
                     buildIndex();
+                    break;
+                case 8:
+                    searchByAttributes();
                     break;
                 case 0:
                     System.out.println("Finalizando programa....");
@@ -139,6 +150,10 @@ public class App {
                         Integer.parseInt(fields[14]),
                         unquote(fields[16]));
                 service.create(song);
+                for (String artist : song.getArtistsName()) {
+                    artistList.insert(artist, song.id());
+                }
+                yearList.insert(String.valueOf(song.getReleasedDate().getYear()), song.id());
             } catch (NumberFormatException e) {
                 skipped++; // linha com dado corrompido no dataset original (ex: campo "streams" inválido)
             }
@@ -158,8 +173,14 @@ public class App {
         int id = service.nextId();
         Song song = inputReader.readSong(id);
         service.create(song);
+        
+        for (String artist : song.getArtistsName()) {
+            artistList.insert(artist, song.id());
+        }
+        yearList.insert(String.valueOf(song.getReleasedDate().getYear()), song.id());
+
         System.out.println("(criação via " + service.activeIndexLabel() + ")");
-        System.out.println("Registro adicionado com sucesso:");
+        System.out.println("Registo adicionado com sucesso:");
         System.out.println(song);
     }
 
@@ -183,50 +204,71 @@ public class App {
         System.out.println("(atualização via " + service.activeIndexLabel() + ")");
 
         if (existingSong == null) {
-            System.out.println("Erro: Registro com o id [" + id + "] não encontrado para atualização.");
+            System.out.println("Erro: Registo com o id [" + id + "] não encontrado para atualização.");
             return;
         }
         
-        System.out.println("Registro atual encontrado. Insira os novos dados abaixo:");
-        // Chama o método readSong() passando o mesmo ID, para gerar o objeto com os novos atributos
+        System.out.println("Registo atual encontrado. Insira os novos dados abaixo:");
         Song updatedSong = inputReader.readSong(id); 
         
         if (service.update(updatedSong)) {
-            System.out.println("Registro atualizado com sucesso.");
-        }
-        else {
-            System.out.println("Falha ao atualizar o registro.");
+            for (String artist : existingSong.getArtistsName()) {
+                artistList.remove(artist, id);
+            }
+            yearList.remove(String.valueOf(existingSong.getReleasedDate().getYear()), id);
+            
+            for (String artist : updatedSong.getArtistsName()) {
+                artistList.insert(artist, id);
+            }
+            yearList.insert(String.valueOf(updatedSong.getReleasedDate().getYear()), id);
+
+            System.out.println("Registo atualizado com sucesso e listas invertidas sincronizadas.");
+        } else {
+            System.out.println("Falha ao atualizar o registo.");
         }
     }
 
     private static void deleteRecord() throws IOException {
         int id = inputReader.readId();
+        Song existingSong = service.search(id); 
         System.out.println("(remoção via " + service.activeIndexLabel() + ")");
 
-        if (service.delete(id)) {
-            System.out.println("Registro deletado com sucesso.");
-        }
-        else {
-            System.out.println("Erro: Registro com o id [" + id + "] não encontrado para deleção.");
+        if (existingSong != null && service.delete(id)) {
+            for (String artist : existingSong.getArtistsName()) {
+                artistList.remove(artist, id);
+            }
+            yearList.remove(String.valueOf(existingSong.getReleasedDate().getYear()), id);
+
+            System.out.println("Registo apagado com sucesso e listas invertidas atualizadas.");
+        } else {
+            System.out.println("Erro: Registo com o id [" + id + "] não encontrado para deleção.");
         }
     }
 
     private static void buildIndex() throws IOException {
-        int type = inputReader.readIndexTypeOption();
-        if (type != 1) {
-            System.out.println("Esse tipo de índice ainda não foi implementado.");
-            return;
-        }
+        System.out.println("Escolha o tipo de índice (1 para Árvore B+, 2 para Hashing Estendido):");
+        int type = scanner.nextInt();
 
         if (Files.exists(Path.of(INDEX_FILE_PATH))) {
-            System.out.println("Já existe um índice. Reconstruí-lo vai sobrescrever o arquivo atual. Continuar? (s/n)");
+            System.out.println("Já existe um índice. Reconstruí-lo vai sobrescrever o ficheiro atual. Continuar? (s/n)");
             if (!scanner.next().equalsIgnoreCase("s")) {
                 return;
             }
         }
 
-        int order = inputReader.readIndexOrder();
-        Index<Integer> index = BPlusTreeIndex.create(INDEX_FILE_PATH, order);
+        Index<Integer> index;
+        if (type == 1) {
+            int order = inputReader.readIndexOrder(); // Ex: 8
+            index = BPlusTreeIndex.create(INDEX_FILE_PATH, order);
+        } else if (type == 2) {
+            System.out.println("Digite a capacidade do bucket (Ex: 20):");
+            int capacity = scanner.nextInt();
+            index = ExtendibleHashIndex.create(INDEX_FILE_PATH.replace(".idx", ""), capacity);
+        } else {
+            System.out.println("Tipo inválido.");
+            return;
+        }
+
         service.attachIndex(index);
         System.out.println("Índice construído com sucesso: " + service.activeIndexLabel());
     }
@@ -266,5 +308,64 @@ public class App {
             sorted.close();
             sorted.delete();
         }
+    }
+
+    private static void searchByAttributes() throws IOException {
+        System.out.println("\n--- Busca por Atributos ---");
+        System.out.println("1 - Buscar por Artista");
+        System.out.println("2 - Buscar por Ano de Lançamento");
+        System.out.println("3 - Busca Composta (Artista E Ano)");
+        System.out.print("Escolha uma opção: ");
+        
+        int choice = scanner.nextInt();
+        scanner.nextLine();
+
+        List<Integer> ids = null;
+
+        if (choice == 1) {
+            System.out.print("Digite o nome exato do artista: ");
+            String artist = scanner.nextLine();
+            ids = artistList.search(artist);
+            
+        } else if (choice == 2) {
+            System.out.print("Digite o ano de lançamento (Ex: 2023): ");
+            String year = scanner.nextLine();
+            ids = yearList.search(year);
+            
+        } else if (choice == 3) {
+            System.out.print("Digite o nome exato do artista: ");
+            String artist = scanner.nextLine();
+            List<Integer> artistIds = artistList.search(artist);
+            
+            System.out.print("Digite o ano de lançamento (Ex: 2023): ");
+            String year = scanner.nextLine();
+            List<Integer> yearIds = yearList.search(year);
+            
+            ids = InvertedList.intersect(artistIds, yearIds); 
+            
+        } else {
+            System.out.println("Opção inválida.");
+            return;
+        }
+
+        // Validação dos resultados
+        if (ids == null || ids.isEmpty()) {
+            System.out.println("\nNenhum registo encontrado com esses parâmetros.");
+            return;
+        }
+
+        // Exibição dos resultados encontrados
+        System.out.println("\nForam encontrados " + ids.size() + " registo(s). A carregar dados...");
+        System.out.println("--------------------------------------------------");
+        
+        int count = 1;
+        for (Integer id : ids) {
+            Song song = service.search(id);
+            if (song != null) {
+                System.out.println(count + " - " + song);
+                count++;
+            }
+        }
+        System.out.println("--------------------------------------------------");
     }
 }
