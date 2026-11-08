@@ -419,11 +419,9 @@ public class App {
     // Armazena todas as posições encontradas em determinado campo da música.
     private record SearchHit(SearchField field, List<Integer> positions) { }
 
-    /**
-     * Percorre os registros válidos do arquivo binário e pesquisa um padrão em
-     * títulos, artistas ou ambos. KMP e BMH recebem exatamente os mesmos dados,
-     * permitindo comparar tempo e verificar se retornam os mesmos resultados.
-     */
+    // Percorre os registros válidos do arquivo binário e pesquisa um padrão em
+    // títulos, artistas ou ambos. KMP e BMH recebem exatamente os mesmos dados,
+    // permitindo comparar tempo e verificar se retornam os mesmos resultados.
     private static void searchByPattern() throws IOException {
         System.out.println("\n--- Casamento de Padrões (TP3) ---");
         System.out.println("1 - Títulos das músicas");

@@ -3,12 +3,10 @@ package pattern;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Knuth-Morris-Pratt (KMP): busca um padrão sem retroceder no texto.
- *
- * Pré-processamento: O(m) de tempo e espaço, onde m é o tamanho do padrão.
- * Busca: O(n), onde n é o tamanho do texto, mesmo no pior caso.
- */
+// Knuth-Morris-Pratt (KMP): busca um padrão sem retroceder no texto.
+
+// Pré-processamento: O(m) de tempo e espaço, onde m é o tamanho do padrão.
+// Busca: O(n), onde n é o tamanho do texto, mesmo no pior caso.
 public class KmpMatcher implements PatternMatcher {
 
     private final String pattern;
@@ -22,14 +20,9 @@ public class KmpMatcher implements PatternMatcher {
         this.lps = buildLps(pattern);
     }
 
-    /**
-     * LPS (Longest Proper Prefix which is also Suffix): para cada posição i,
-     * guarda o comprimento do maior prefixo próprio de pattern[0..i] que também
-     * é sufixo desse trecho. Um prefixo próprio nunca é a string inteira.
-     *
-     * Exemplo: para "abab", lps = [0, 0, 1, 2]. Assim, quando há uma
-     * divergência depois de "abab", podemos reaproveitar o prefixo "ab".
-     */
+    // LPS (Longest Proper Prefix which is also Suffix): para cada posição i,
+    // guarda o comprimento do maior prefixo próprio de pattern[0..i] que também
+    // é sufixo desse trecho. Um prefixo próprio nunca é a string inteira.
     private static int[] buildLps(String pattern) {
         int[] lps = new int[pattern.length()];
         int length = 0; // tamanho do prefixo/sufixo encontrado até o momento

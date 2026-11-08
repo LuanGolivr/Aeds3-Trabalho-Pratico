@@ -4,15 +4,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Boyer-Moore-Horspool (BMH): variante simplificada do Boyer-Moore que
- * compara da direita para a esquerda e aplica a regra do caractere ruim.
- *
- * O pré-processamento calcula deslocamentos a partir do padrão. Em muitos
- * textos, ele permite saltar vários caracteres de uma só vez; o pior caso,
- * entretanto, ainda é O(n * m). A tabela cobre todos os valores de char do
- * Java (UTF-16), permitindo caracteres acentuados sem dependências externas.
- */
+// Boyer-Moore-Horspool (BMH): variante simplificada do Boyer-Moore que
+// compara da direita para a esquerda e aplica a regra do caractere ruim.
+
+// O pré-processamento calcula deslocamentos a partir do padrão. Em muitos
+// textos, ele permite saltar vários caracteres de uma só vez; o pior caso,
+// entretanto, ainda é O(n * m). A tabela cobre todos os valores de char do
+// Java (UTF-16), permitindo caracteres acentuados sem dependências externas.
 public class BoyerMooreHorspoolMatcher implements PatternMatcher {
 
     private final String pattern;
