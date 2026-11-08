@@ -220,6 +220,21 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     }
 
     @Override
+    public void restore(byte[] content) throws IOException {
+        // troca o conteúdo pelo arquivo descomprimido, mantendo o mesmo RandomAccessFile aberto
+        this.file.setLength(0);
+        this.file.seek(0);
+        this.file.write(content);
+        createHeader(); // relê o header (último id, contagem) que veio junto no conteúdo
+
+        // o índice apontava para os offsets do arquivo antigo: esvazia e refaz varrendo o novo
+        if (index != null) {
+            index.clear();
+            attachIndex(index);
+        }
+    }
+
+    @Override
     public boolean update(T record) throws IOException {
         // Deleta o registro atual
         if (delete(record.id())) {

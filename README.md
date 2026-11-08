@@ -1,8 +1,8 @@
 # AEDS3 — Trabalho Prático
 
 CRUD de músicas do Spotify em arquivo binário, rodando no terminal em Java, com ordenação
-externa (seleção por substituição + intercalação polifásica) e índice em Árvore B+ sobre o id
-dos registros.
+externa, índice primário em Árvore B+ ou Hashing Estendido, Lista Invertida por artista e ano, e
+compressão da base com Huffman e LZW.
 
 O código-fonte, o dataset e as instruções detalhadas ficam em [`tp/`](tp/README.md).
 
@@ -25,4 +25,5 @@ javac -d bin @sources.txt
 java -cp bin App
 ```
 
-Veja [tp/README.md](tp/README.md) para a estrutura do projeto e detalhes da ordenação externa.
+Veja [tp/README.md](tp/README.md) para o menu, a estrutura do projeto, as decisões de cada
+estrutura/algoritmo e como rodar os testes.

@@ -1,11 +1,15 @@
+import compression.Huffman;
+import compression.Lzw;
 import index.BPlusTreeIndex;
 import index.ExtendibleHashIndex;
 import index.InvertedList;
 import input.SongInputReader;
+import interfaces.Compressor;
 import interfaces.Index;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -24,6 +28,9 @@ public class App {
     private static final Path HASH_BUCKET_PATH = Path.of(HASH_BASE_PATH + ".bkt");
     private static final String DATASET_PATH = "dataset/Spotify Most Streamed Songs.csv";
     private static final String SORT_WORK_DIR = "files/sort_tmp";
+    // prefixo dos arquivos comprimidos: files/songs + NomeAlgoritmo + "Compressao" + X
+    private static final String COMPRESSED_BASE_PATH = "files/songs";
+    private static final Compressor[] COMPRESSORS = { new Huffman(), new Lzw() };
 
     private static Scanner scanner;
     private static SongInputReader inputReader;
@@ -59,6 +66,8 @@ public class App {
         "6 - Ordenar registos",
         "7 - Criar/reconstruir índice",
         "8 - Buscar por atributos (Lista Invertida)",
+        "9 - Comprimir base de dados (Huffman e LZW)",
+        "10 - Descomprimir base de dados (versão X)",
         "0 - Sair do programa",
     };
 
@@ -93,6 +102,12 @@ public class App {
                     break;
                 case 8:
                     searchByAttributes();
+                    break;
+                case 9:
+                    compressDatabase();
+                    break;
+                case 10:
+                    decompressDatabase();
                     break;
                 case 0:
                     System.out.println("Finalizando programa....");
@@ -160,15 +175,20 @@ public class App {
                         Integer.parseInt(fields[14]),
                         unquote(fields[16]));
                 service.create(song);
-                for (String artist : song.getArtistsName()) {
-                    artistList.insert(artist, song.id());
-                }
-                yearList.insert(String.valueOf(song.getReleasedDate().getYear()), song.id());
+                addToInvertedLists(song);
             } catch (NumberFormatException e) {
                 skipped++; // linha com dado corrompido no dataset original (ex: campo "streams" inválido)
             }
         }
         System.out.println("Base de dados carregada com sucesso." + (skipped > 0 ? " (" + skipped + " linha(s) corrompida(s) ignorada(s))" : ""));
+    }
+
+    // indexa a música nas listas invertidas de artista e de ano de lançamento
+    private static void addToInvertedLists(Song song) throws IOException {
+        for (String artist : song.getArtistsName()) {
+            artistList.insert(artist, song.id());
+        }
+        yearList.insert(String.valueOf(song.getReleasedDate().getYear()), song.id());
     }
 
     private static String unquote(String field) {
@@ -183,11 +203,7 @@ public class App {
         int id = service.nextId();
         Song song = inputReader.readSong(id);
         service.create(song);
-        
-        for (String artist : song.getArtistsName()) {
-            artistList.insert(artist, song.id());
-        }
-        yearList.insert(String.valueOf(song.getReleasedDate().getYear()), song.id());
+        addToInvertedLists(song);
 
         System.out.println("(criação via " + service.activeIndexLabel() + ")");
         System.out.println("Registo adicionado com sucesso:");
@@ -381,5 +397,133 @@ public class App {
             }
         }
         System.out.println("--------------------------------------------------");
+    }
+
+    // ---------------------------------------------------------------- compressão (TP3)
+
+    // nome do arquivo de uma versão comprimida, ex.: files/songsHuffmanCompressao1
+    private static Path compressedPath(Compressor compressor, int version) {
+        return Path.of(COMPRESSED_BASE_PATH + compressor.name() + "Compressao" + version);
+    }
+
+    // próxima versão livre: a primeira X para a qual nenhum algoritmo ainda gerou arquivo
+    private static int nextCompressionVersion() {
+        int version = 1;
+        while (true) {
+            boolean taken = false;
+            for (Compressor compressor : COMPRESSORS) {
+                taken |= Files.exists(compressedPath(compressor, version));
+            }
+            if (!taken) {
+                return version;
+            }
+            version++;
+        }
+    }
+
+    // posição do menor valor no vetor (usado para eleger o algoritmo vencedor de cada critério)
+    private static int indexOfMin(long[] values) {
+        int best = 0;
+        for (int i = 1; i < values.length; i++) {
+            if (values[i] < values[best]) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    // comprime o arquivo de dados inteiro (header, lápides, tamanhos e campos) com cada algoritmo,
+    // grava uma nova versão X e compara taxa de compressão e tempo entre eles
+    // ponytail: arquivo inteiro em memória (byte[]); limite ~2 GB, suficiente para a base do TP
+    private static void compressDatabase() throws IOException {
+        byte[] original = Files.readAllBytes(Path.of(SONGS_FILE_PATH));
+        int version = nextCompressionVersion();
+        System.out.println("Comprimindo " + SONGS_FILE_PATH + " (" + original.length + " bytes) - versão " + version);
+
+        long[] sizes = new long[COMPRESSORS.length];
+        long[] times = new long[COMPRESSORS.length];
+        for (int i = 0; i < COMPRESSORS.length; i++) {
+            Compressor compressor = COMPRESSORS[i];
+
+            // mede só o algoritmo (sem a escrita em disco), para a comparação ser justa
+            long start = System.nanoTime();
+            byte[] compressed = compressor.compress(original);
+            times[i] = System.nanoTime() - start;
+            sizes[i] = compressed.length;
+
+            Path output = compressedPath(compressor, version);
+            Files.write(output, compressed);
+
+            // ganho positivo = arquivo diminuiu; negativo = a "compressão" aumentou o arquivo
+            double gain = original.length == 0 ? 0 : 100.0 * (original.length - compressed.length) / original.length;
+            System.out.printf("  %-8s -> %s: %d bytes | %s de %.2f%% | tempo %.2f ms%n",
+                    compressor.name(), output, compressed.length,
+                    gain >= 0 ? "ganho" : "perda", Math.abs(gain), times[i] / 1e6);
+        }
+
+        int smallest = indexOfMin(sizes);
+        int fastest = indexOfMin(times);
+        System.out.println("Melhor compressão: " + COMPRESSORS[smallest].name() + " (" + sizes[smallest] + " bytes)");
+        System.out.println("Compressão mais rápida: " + COMPRESSORS[fastest].name()
+                + String.format(" (%.2f ms)", times[fastest] / 1e6));
+    }
+
+    // descomprime a versão X com cada algoritmo, compara os tempos e substitui o arquivo de dados
+    // pelo resultado; índice primário e listas invertidas são reconstruídos a partir dele
+    private static void decompressDatabase() throws IOException {
+        System.out.println("Digite a versão X a descomprimir:");
+        int version = scanner.nextInt();
+
+        byte[] restored = null;
+        long[] times = new long[COMPRESSORS.length];
+        Arrays.fill(times, Long.MAX_VALUE); // algoritmo sem arquivo/que falhou nunca é o mais rápido
+        for (int i = 0; i < COMPRESSORS.length; i++) {
+            Compressor compressor = COMPRESSORS[i];
+            Path input = compressedPath(compressor, version);
+            if (!Files.exists(input)) {
+                System.out.println("  " + compressor.name() + ": arquivo " + input + " não encontrado.");
+                continue;
+            }
+
+            byte[] compressed = Files.readAllBytes(input);
+            byte[] result;
+            long start = System.nanoTime();
+            try {
+                result = compressor.decompress(compressed);
+            } catch (IOException e) {
+                System.out.println("  " + compressor.name() + ": falha ao descomprimir " + input + " (" + e.getMessage() + ")");
+                continue;
+            }
+            times[i] = System.nanoTime() - start;
+            System.out.printf("  %-8s <- %s: %d bytes | tempo %.2f ms%n", compressor.name(), input, result.length, times[i] / 1e6);
+
+            // os dois algoritmos comprimiram o mesmo arquivo: se os resultados divergem, algum
+            // arquivo foi alterado/corrompido e não dá para saber qual é o certo
+            if (restored != null && !Arrays.equals(restored, result)) {
+                System.out.println("Erro: Huffman e LZW produziram resultados diferentes. Arquivo de dados mantido.");
+                return;
+            }
+            restored = result;
+        }
+
+        if (restored == null) {
+            System.out.println("Nenhum arquivo válido da versão " + version + " foi encontrado.");
+            return;
+        }
+        int fastest = indexOfMin(times);
+        System.out.println("Descompressão mais rápida: " + COMPRESSORS[fastest].name()
+                + String.format(" (%.2f ms)", times[fastest] / 1e6));
+
+        // substitui o songs.bin e refaz o índice primário (dentro do restore)...
+        service.restore(restored);
+        // ...e as listas invertidas, que podem ter termos/ids que não existem na versão restaurada
+        artistList.clear();
+        yearList.clear();
+        Iterator<Song> songs = service.iterator();
+        while (songs.hasNext()) {
+            addToInvertedLists(songs.next());
+        }
+        System.out.println("Arquivo de dados " + SONGS_FILE_PATH + " substituído pela versão " + version
+                + " descomprimida (índice e listas invertidas reconstruídos).");
     }
 }
