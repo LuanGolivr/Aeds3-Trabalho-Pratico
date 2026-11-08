@@ -1,8 +1,12 @@
 # Trabalho Prático - AEDS3
 
-CRUD de músicas do Spotify em arquivo binário, rodando no terminal, em Java, com ordenação
-externa (seleção por substituição + intercalação polifásica) e índice em Árvore B+ sobre o id
-dos registros.
+CRUD de músicas do Spotify em arquivo binário, rodando no terminal, em Java, com:
+
+- **TP1** — arquivo sequencial com lápide e ordenação externa (seleção por substituição +
+  intercalação polifásica);
+- **TP2** — índice primário em **Árvore B+** ou **Hashing Estendido** sobre o id, e **Lista
+  Invertida** para busca por artista e por ano de lançamento;
+- **TP3** — **compressão** da base com **Huffman** e **LZW** (casamento de padrões em andamento).
 
 ## Como compilar e rodar
 
@@ -21,108 +25,179 @@ javac -d bin @sources.txt
 java -cp bin App
 ```
 
+## Menu
+
+| Opção | O que faz |
+|---|---|
+| 1 | Carrega o CSV na base (`files/songs.bin`), apagando a base, o índice e as listas anteriores |
+| 2 – 5 | Criar, buscar, atualizar e deletar registro por id |
+| 6 | Ordenação externa por nome da faixa (reescreve e compacta o `songs.bin`) |
+| 7 | Cria/reconstrói o índice primário: 1 = Árvore B+, 2 = Hashing Estendido |
+| 8 | Busca por artista, por ano, ou composta (artista E ano) — Lista Invertida |
+| 9 | Comprime a base com Huffman e LZW, gerando uma nova versão X |
+| 10 | Descomprime a versão X e substitui a base por ela |
+| 0 | Sair |
+
 ## Dataset
 
-`dataset/Spotify Most Streamed Songs.csv` — carregado pela opção 1 do menu, que grava cada
-linha como um registro em `files/songs.bin` (arquivo binário, ignorado pelo git). Linhas com
-campo numérico corrompido são puladas e contadas no resumo final. O índice, quando construído,
-fica em `files/songs.idx` (também ignorado pelo git — é derivado do `.bin`, dá pra reconstruir).
+`dataset/Spotify Most Streamed Songs.csv` — carregado pela opção 1, que grava cada linha como um
+registro em `files/songs.bin`. Linhas com campo numérico corrompido são puladas e contadas no
+resumo final. Tudo dentro de `files/` é gerado pelo programa (ignorado pelo git).
 
 ## Estrutura do projeto
 
 ```
 src/
-├── App.java          # menu e ponto de entrada
-├── model/             # Song — dado de domínio, serialização (toBytes/fromBytes)
-├── interfaces/         # Recordable, RecordFile, RecordInput, Index
-├── storage/            # BinaryRecordFile + Header — persistência em arquivo binário
-├── service/            # RecordService — camada entre o menu e o armazenamento
-├── input/              # SongInputReader — leitura dos dados via terminal
-├── index/              # índice em Árvore B+ sobre o id (ver seção abaixo)
-└── sort/                # ordenação externa (ver seção abaixo)
+├── App.java             # menu e ponto de entrada
+├── RegressionSelfTest.java
+├── model/               # Song — dado de domínio, serialização (toBytes/fromBytes)
+├── interfaces/          # Recordable, RecordFile, RecordInput, Index, Compressor
+├── storage/             # BinaryRecordFile + Header — persistência em arquivo binário
+├── service/             # RecordService — camada entre o menu e o armazenamento
+├── input/               # SongInputReader — leitura dos dados via terminal
+├── sort/                # ordenação externa
+├── index/               # Árvore B+, Hashing Estendido e Lista Invertida
+└── compression/         # Huffman, LZW e leitura/escrita de bits
 ```
 
-## CRUD (opções 1-5 do menu)
+## CRUD (opções 1-5)
 
-`BinaryRecordFile` implementa `create`, `read`, `update` (delete + create do mesmo id) e
-`delete` (lógico, via lápide `'*'`), com contador de próximo id e quantidade de registros
-ativos persistidos num header de 8 bytes no início do arquivo.
+`BinaryRecordFile` implementa `create`, `read`, `update` (delete + create do mesmo id) e `delete`
+(lógico, via lápide `'*'`). O header de 8 bytes no início do arquivo guarda o último id usado e a
+quantidade de registros ativos. Cada registro é `[lápide (1 byte)][tamanho (int)][dados]`.
 
-Além do `readAll()` (carrega tudo em uma `List`), há `iterator()`: lê os registros válidos um
-por vez direto do disco, sem materializar a base inteira em memória — é o que a ordenação
-externa usa como entrada.
+Além do `readAll()`, há `iterator()`, que lê os registros válidos um por vez direto do disco —
+é o que a ordenação externa e a reconstrução de índices usam.
 
-## Índice em Árvore B+ (opção 7 do menu)
-
-Arquivo separado (`files/songs.idx`), chave `id -> posição no songs.bin`.
-
-**Por que Árvore B+ e não B ou B\***: numa B tradicional cada nó (raiz, internos e folhas) guarda
-a posição do registro junto da chave, mesmo nos níveis que só servem de roteamento — isso
-desperdiça espaço e reduz quantas chaves cabem por nó. Na B+ só as folhas guardam a posição; os
-nós internos guardam somente chaves separadoras, cabem mais por nó, a árvore fica mais rasa e
-busca menos páginas em disco. B\* melhora ainda mais a ocupação redistribuindo antes de dividir,
-mas é uma complexidade de implementação sem ganho real pro tamanho da base aqui — a política de
-remoção da B+ já garante pelo menos 50% de ocupação por nó (ver abaixo).
-
-Implementação em `src/index/`:
-- **`IndexHeader`** — cabeçalho do `.idx`: ordem (definida na criação/reconstrução do índice,
-  nunca muda depois), offset do nó raiz, offset livre pro próximo nó.
-- **`Node`** — nó de tamanho fixo em disco, calculado a partir da ordem, endereçável só por
-  aritmética de offset (sem precisar de um índice à parte pra achar nós). As folhas ficam
-  encadeadas entre si (não usado hoje, já que a busca é só por id exato, mas deixa pronta uma
-  busca por faixa futura sem redesenhar nada).
-- **`BPlusTreeIndex`** — busca (`O(log n)` acessos a disco em vez do `O(n)` da varredura linear),
-  inserção com split (propagando até criar uma raiz nova se preciso) e remoção com
-  redistribuição/fusão de nós (pega emprestado de um irmão com sobra, ou funde com um irmão se
-  nenhum tiver — mantém a ocupação mínima de 50% por nó, exceto a raiz).
-
-A ordem é perguntada só na criação/reconstrução do índice e fica salva no próprio `.idx` — não
-precisa ser informada de novo nas próximas execuções, o índice é recarregado do disco
-automaticamente se já existir. Reconstruir um índice existente pede confirmação antes de
-sobrescrever.
-
-O índice é opcional e transparente: `BinaryRecordFile` recebe um `Index<Integer>` que pode ser
-`null`. Sem índice, `create`/`read`/`delete` caem pra varredura linear, como antes de essa
-funcionalidade existir. Com índice, toda alteração no `songs.bin` atualiza o `.idx` no mesmo
-momento (nunca fica desatualizado), e cada operação do menu (3 a 5) indica no terminal qual
-estrutura resolveu ela.
-
-`interfaces.Index<K>` já deixa o encaixe pronto pra Hashing Dinâmico e Lista Invertida — na opção
-7 do menu já dá pra escolher o tipo, mas por enquanto só a Árvore B+ está implementada; as outras
-duas avisam que ainda não foram feitas.
-
-## Ordenação externa (opção 6 do menu)
+## Ordenação externa (opção 6)
 
 Implementada em `src/sort/`, em duas fases:
 
-- **`ReplacementSelection`** — fase 1: consome o arquivo de entrada uma única vez mantendo um
-  heap (min-heap) de tamanho fixo, gerando runs (trechos já ordenados) geralmente bem mais
-  longas que o próprio heap.
-- **`PolyphaseMerge`** — fase 2: distribui as runs entre fitas de entrada segundo o Fibonacci
-  generalizado (distribuição "ideal" da intercalação polifásica) e intercala em passadas,
-  reaproveitando a fita que esvazia a cada passada como a próxima fita de saída — usa no máximo
-  `ways + 1` fitas no total, nunca mais.
-- **`Tape`** — abstração de uma fita: arquivo de trabalho sequencial usado pelas duas fases.
-- **`ExternalSort`** — fachada que encadeia as duas fases; recebe um `Iterator<T>` de entrada e
-  devolve uma `Tape<T>` com os registros em ordem.
+- **`ReplacementSelection`** — gera runs ordenadas com um heap de tamanho fixo, normalmente bem
+  mais longas que o próprio heap.
+- **`PolyphaseMerge`** — distribui as runs entre as fitas segundo Fibonacci generalizado e
+  intercala em passadas, reaproveitando a fita que esvazia como a próxima saída (no máximo
+  `ways + 1` fitas).
+- **`Tape`** — uma fita: arquivo de trabalho sequencial. **`ExternalSort`** encadeia as fases.
 
-No menu, a opção 6 ordena os registros por número de streams (`Song::streams`). O número de
-caminhos (fitas, `ways`) e a quantidade máxima de registros por vez em memória primária (tamanho
-do heap) são perguntados ao usuário a cada execução — não são mais constantes fixas no código.
+O número de caminhos e o tamanho do heap são perguntados a cada execução. Ao final, o
+`songs.bin` é **substituído** pela versão ordenada, já sem registros deletados. Como os offsets
+mudam, o índice primário ativo é refeito durante a reescrita (as listas invertidas guardam ids,
+não offsets, e não são afetadas).
 
-Depois de exibir o resultado, a ordenação **substitui** `files/songs.bin` pela versão ordenada:
-como a leitura de entrada (`iterator()`) já ignora registros deletados/desatualizados, o novo
-arquivo sai compactado, sem os "espaços em branco" deixados por deleções e updates anteriores.
-O contador de próximo id é preservado; as operações de CRUD seguintes já passam a atuar nesse
-novo arquivo.
+## Índice primário (opção 7)
 
-## Status / limitações conhecidas
+O índice mapeia `id -> posição do registro no songs.bin` e é opcional: sem ele, as operações por
+id fazem varredura linear. Com ele, toda alteração no `songs.bin` atualiza o índice na hora, e
+cada operação do menu mostra qual estrutura a resolveu. Só um tipo de índice existe por vez:
+criar um apaga os arquivos do outro. Ao iniciar, o programa reabre automaticamente o índice que
+estiver em disco.
 
-- Sem o índice construído, busca/atualização/deleção por id ainda são varredura linear O(n) do
-  arquivo. Construir o índice (opção 7) resolve, passando pra O(log n).
-- O arquivo de índice nunca reaproveita espaço de nós descartados (por fusão numa remoção) — só
-  cresce. Reconstruir o índice do zero (opção 7) resolve, se isso virar problema.
-- Hashing Dinâmico e Lista Invertida ainda não foram implementados — o menu já pergunta qual tipo
-  de índice criar, mas só a Árvore B+ está disponível por enquanto.
-- `interfaces.RecordInput` existe no código mas não é implementada por `SongInputReader` — é uma
-  interface órfã, sem impacto funcional hoje.
+### Árvore B+ (`files/songs.idx`)
+
+**Por que B+ e não B ou B\***: na B+ só as folhas guardam a posição do registro; os nós internos
+guardam apenas chaves separadoras, então cabem mais chaves por nó, a árvore fica mais rasa e a
+busca lê menos páginas. A B\* melhoraria a ocupação redistribuindo antes de dividir, mas a
+remoção da B+ já garante 50% de ocupação mínima, sem a complexidade extra.
+
+- **`IndexHeader`** — ordem (fixada na criação), offset da raiz e próximo offset livre.
+- **`Node`** — nó de tamanho fixo em disco, calculado pela ordem; folhas encadeadas.
+- **`BPlusTreeIndex`** — busca `O(log n)`, inserção com split propagado até a raiz e remoção com
+  redistribuição/fusão de irmãos.
+
+### Hashing Estendido (`files/songs.dir` + `files/songs.bkt`)
+
+- **`HashDirectory`** — profundidade global e o vetor de ponteiros para buckets; guarda também a
+  capacidade do bucket, para o índice ser reaberto sem perguntar de novo.
+- **`HashBucket`** — bucket de tamanho fixo com profundidade local, chaves e posições.
+- **`ExtendibleHashIndex`** — `h(k) = k mod 2^p`. Bucket cheio é dividido (duplicando o diretório
+  se a profundidade local já for igual à global) e a chave é reinserida, dividindo de novo se
+  todas as chaves antigas tiverem caído no mesmo lado.
+
+## Lista Invertida (opção 8)
+
+Duas listas: por **artista** (`files/artist.dict` + `.blk`) e por **ano de lançamento**
+(`files/year.dict` + `.blk`).
+
+- **Dicionário** (`.dict`) — termo normalizado (minúsculo, sem espaços nas pontas) -> offset do
+  primeiro bloco; carregado em memória ao abrir e regravado a cada termo novo.
+- **Blocos** (`.blk`, `PostingBlock`) — até 20 ids por bloco, encadeados em disco quando um
+  termo tem mais ids que isso.
+
+A busca composta (artista E ano) faz a interseção das duas listas de ids. As listas são
+atualizadas em create/update/delete, apagadas ao recarregar a base (opção 1) e reconstruídas ao
+descomprimir uma versão (opção 10).
+
+## Compressão (opções 9 e 10)
+
+O arquivo comprimido é o `songs.bin` **inteiro, byte a byte** — header, lápides, indicadores de
+tamanho e campos. Os dois algoritmos implementam `interfaces.Compressor`.
+
+**Opção 9** comprime com os dois algoritmos e grava a próxima versão livre X:
+
+```
+files/songsHuffmanCompressaoX
+files/songsLZWCompressaoX
+```
+
+Para cada um mostra o tamanho, o ganho (ou perda) em % e o tempo, e informa qual comprimiu mais e
+qual foi mais rápido.
+
+**Opção 10** pede a versão X, descomprime com os dois algoritmos, mostra os tempos e qual foi
+mais rápido, e substitui o `songs.bin` pelo resultado. Depois reconstrói o índice primário e as
+listas invertidas a partir da base restaurada. Se os dois algoritmos produzirem conteúdos
+diferentes, a base não é alterada. Se um dos arquivos estiver faltando ou corrompido, usa o
+outro.
+
+### Huffman (`compression/Huffman.java`)
+
+- Símbolos são os 256 valores de byte; a árvore é montada juntando sempre os dois nós de menor
+  frequência (fila de prioridade).
+- O arquivo gerado guarda o tamanho original e a **tabela de frequências** só dos bytes que
+  aparecem (5 bytes cada). A descompressão monta a mesma árvore a partir dela, porque o desempate
+  entre frequências iguais é determinístico.
+- Arquivo com um único byte distinto recebe o código `0` de 1 bit.
+
+### LZW (`compression/Lzw.java`)
+
+- **Dicionário inicial:** os 256 valores de byte (códigos 0–255). Como o arquivo é binário
+  (inteiros, lápides, tamanhos), qualquer byte pode aparecer — um dicionário só com caracteres
+  de texto não serviria.
+- **Códigos de tamanho variável**, de 9 a 16 bits: crescem 1 bit quando o dicionário deixa de
+  caber no tamanho atual. Com 65.536 entradas o dicionário é congelado (para de aprender).
+- O dicionário não é gravado: a descompressão o reconstrói, incluindo o caso especial em que o
+  código lido é o que está sendo criado naquele passo (ex.: `aaa`).
+
+### Resultado na base completa (81.029 bytes)
+
+| Algoritmo | Tamanho | Ganho | Observação |
+|---|---|---|---|
+| Huffman | 52.260 B | 35,5% | compressão mais rápida |
+| LZW | 43.684 B | 46,1% | melhor taxa e descompressão mais rápida |
+
+O LZW ganha porque aproveita sequências repetidas (nomes de artistas, datas, campos de tamanho
+fixo), enquanto o Huffman só aproveita a frequência de cada byte isolado. Os tempos variam a cada
+execução.
+
+## Testes
+
+Não há framework de teste no projeto; cada teste é uma classe executável que falha com
+`AssertionError`:
+
+```bash
+java -cp bin index.BPlusTreeIndexSelfTest           # inserção, busca e remoção na B+
+java -cp bin RegressionSelfTest                     # hash, índice após ordenação, listas ao recarregar
+java -cp bin compression.CompressionSelfTest files/songs.bin   # ida e volta de Huffman e LZW
+```
+
+`CompressionSelfTest` cobre entrada vazia, 1 byte, byte repetido, os 256 valores, o caso especial
+do LZW, 3 MB de texto (enche o dicionário do LZW) e arquivos truncados (precisam dar erro). O
+argumento é opcional e inclui a base real no teste.
+
+## Limitações conhecidas
+
+- A compressão carrega o arquivo inteiro em memória (limite prático ~2 GB, bem acima da base).
+- O arquivo da B+ não reaproveita nós descartados por fusão — só cresce. Reconstruir o índice
+  (opção 7) resolve.
+- O dicionário da Lista Invertida fica inteiro em memória enquanto o programa roda.
+- `interfaces.RecordInput` não é implementada por `SongInputReader` (interface sem uso).

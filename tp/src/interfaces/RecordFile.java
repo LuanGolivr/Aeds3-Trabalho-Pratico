@@ -27,6 +27,10 @@ public interface RecordFile<T extends Recordable> {
     // usado ao recarregar a base de dados do zero
     void clear() throws IOException;
 
+    // substitui o arquivo inteiro (header incluso) pelos bytes dados — usado pela descompressão —
+    // e reconstrói o índice ativo, já que os offsets dos registros podem ter mudado
+    void restore(byte[] content) throws IOException;
+
     boolean update(T record) throws IOException;
 
     boolean delete(int id) throws IOException;

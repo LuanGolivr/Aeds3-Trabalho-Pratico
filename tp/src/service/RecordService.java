@@ -44,6 +44,10 @@ public class RecordService<T extends Recordable> {
         file.clear();
     }
 
+    public void restore(byte[] content) throws IOException {
+        file.restore(content);
+    }
+
     public boolean update(T record) throws IOException {
         return file.update(record);
     }
