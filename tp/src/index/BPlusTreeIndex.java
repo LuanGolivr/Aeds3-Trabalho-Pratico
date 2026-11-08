@@ -49,6 +49,14 @@ public class BPlusTreeIndex implements Index<Integer> {
     }
 
     @Override
+    public void clear() throws IOException {
+        file.setLength(0);
+        header.rootOffset = -1;
+        header.nextNodeOffset = IndexHeader.SIZE_IN_BYTES;
+        header.writeTo(file);
+    }
+
+    @Override
     public String label() {
         return "Árvore B+ (ordem " + order + ")";
     }

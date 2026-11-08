@@ -12,6 +12,9 @@ public interface Index<K> {
 
     boolean remove(K key) throws IOException;
 
+    // esvazia o índice (mantém ordem/capacidade); usado quando o arquivo de dados é reescrito
+    void clear() throws IOException;
+
     // nome da estrutura, pra indicar ao usuário qual índice atendeu a operação (ex.: "Árvore B+")
     String label();
 }

@@ -19,6 +19,9 @@ import storage.BinaryRecordFile;
 public class App {
     private static final String SONGS_FILE_PATH = "files/songs.bin";
     private static final String INDEX_FILE_PATH = "files/songs.idx";
+    private static final String HASH_BASE_PATH = "files/songs"; // gera files/songs.dir e files/songs.bkt
+    private static final Path HASH_DIR_PATH = Path.of(HASH_BASE_PATH + ".dir");
+    private static final Path HASH_BUCKET_PATH = Path.of(HASH_BASE_PATH + ".bkt");
     private static final String DATASET_PATH = "dataset/Spotify Most Streamed Songs.csv";
     private static final String SORT_WORK_DIR = "files/sort_tmp";
 
@@ -35,8 +38,13 @@ public class App {
         artistList = new InvertedList("files/artist");
         yearList = new InvertedList("files/year");
 
-        // se já existe um índice construído em execuções anteriores, carrega e usa direto
-        Index<Integer> index = Files.exists(Path.of(INDEX_FILE_PATH)) ? BPlusTreeIndex.open(INDEX_FILE_PATH) : null;
+        // se já existe um índice construído em execuções anteriores (B+ ou hash), carrega e usa direto
+        Index<Integer> index = null;
+        if (Files.exists(Path.of(INDEX_FILE_PATH))) {
+            index = BPlusTreeIndex.open(INDEX_FILE_PATH);
+        } else if (Files.exists(HASH_DIR_PATH)) {
+            index = ExtendibleHashIndex.open(HASH_BASE_PATH);
+        }
         // cria o arquivo vazio se ele ainda não existir
         service = new RecordService<>(new BinaryRecordFile<>(SONGS_FILE_PATH, Song::fromBytes, index));
         displayMenu();
@@ -128,7 +136,9 @@ public class App {
             if (!scanner.next().equalsIgnoreCase("s")) {
                 return;
             }
-            service.clear();
+            service.clear(); // limpa também o índice ativo
+            artistList.clear();
+            yearList.clear();
         }
 
         List<String> lines = Files.readAllLines(Path.of(DATASET_PATH));
@@ -249,7 +259,7 @@ public class App {
         System.out.println("Escolha o tipo de índice (1 para Árvore B+, 2 para Hashing Estendido):");
         int type = scanner.nextInt();
 
-        if (Files.exists(Path.of(INDEX_FILE_PATH))) {
+        if (Files.exists(Path.of(INDEX_FILE_PATH)) || Files.exists(HASH_DIR_PATH)) {
             System.out.println("Já existe um índice. Reconstruí-lo vai sobrescrever o ficheiro atual. Continuar? (s/n)");
             if (!scanner.next().equalsIgnoreCase("s")) {
                 return;
@@ -260,10 +270,14 @@ public class App {
         if (type == 1) {
             int order = inputReader.readIndexOrder(); // Ex: 8
             index = BPlusTreeIndex.create(INDEX_FILE_PATH, order);
+            // só um índice fica em disco, senão o main() reabriria o errado na próxima execução
+            Files.deleteIfExists(HASH_DIR_PATH);
+            Files.deleteIfExists(HASH_BUCKET_PATH);
         } else if (type == 2) {
             System.out.println("Digite a capacidade do bucket (Ex: 20):");
             int capacity = scanner.nextInt();
-            index = ExtendibleHashIndex.create(INDEX_FILE_PATH.replace(".idx", ""), capacity);
+            index = ExtendibleHashIndex.create(HASH_BASE_PATH, capacity);
+            Files.deleteIfExists(Path.of(INDEX_FILE_PATH));
         } else {
             System.out.println("Tipo inválido.");
             return;

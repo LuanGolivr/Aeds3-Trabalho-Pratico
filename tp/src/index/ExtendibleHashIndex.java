@@ -13,14 +13,17 @@ public class ExtendibleHashIndex implements Index<Integer> {
     private final HashDirectory directory;
     private final int bucketCapacity;
 
-    private ExtendibleHashIndex(RandomAccessFile dirFile, RandomAccessFile bucketFile, HashDirectory directory, int bucketCapacity) {
+    private ExtendibleHashIndex(RandomAccessFile dirFile, RandomAccessFile bucketFile, HashDirectory directory) {
         this.dirFile = dirFile;
         this.bucketFile = bucketFile;
         this.directory = directory;
-        this.bucketCapacity = bucketCapacity;
+        this.bucketCapacity = directory.bucketCapacity;
     }
 
     public static ExtendibleHashIndex create(String basePath, int bucketCapacity) throws IOException {
+        if (bucketCapacity < 1) {
+            throw new IllegalArgumentException("A capacidade do bucket deve ser pelo menos 1.");
+        }
         Path dirPath = Path.of(basePath + ".dir").toAbsolutePath();
         Path bucketPath = Path.of(basePath + ".bkt").toAbsolutePath();
         
@@ -31,32 +34,28 @@ public class ExtendibleHashIndex implements Index<Integer> {
 
         RandomAccessFile dFile = new RandomAccessFile(dirPath.toFile(), "rw");
         RandomAccessFile bFile = new RandomAccessFile(bucketPath.toFile(), "rw");
-
-        // Inicializa com profundidade global 1 (2 espaços no diretório)
-        HashDirectory dir = new HashDirectory(1);
-        
-        // Cria os dois buckets iniciais
-        HashBucket b0 = new HashBucket(bucketCapacity, 1);
-        HashBucket b1 = new HashBucket(bucketCapacity, 1);
-        
-        long offset0 = 0;
-        long offset1 = HashBucket.sizeInBytes(bucketCapacity);
-        
-        b0.writeTo(bFile, offset0);
-        b1.writeTo(bFile, offset1);
-        
-        dir.bucketOffsets[0] = offset0;
-        dir.bucketOffsets[1] = offset1;
-        dir.writeTo(dFile);
-
-        return new ExtendibleHashIndex(dFile, bFile, dir, bucketCapacity);
+        ExtendibleHashIndex index = new ExtendibleHashIndex(dFile, bFile, new HashDirectory(1, bucketCapacity));
+        index.clear();
+        return index;
     }
 
-    public static ExtendibleHashIndex open(String basePath, int bucketCapacity) throws IOException {
+    // reabre um índice já existente; a capacidade do bucket vem gravada no .dir
+    public static ExtendibleHashIndex open(String basePath) throws IOException {
         RandomAccessFile dFile = new RandomAccessFile(basePath + ".dir", "rw");
         RandomAccessFile bFile = new RandomAccessFile(basePath + ".bkt", "rw");
-        HashDirectory dir = HashDirectory.readFrom(dFile);
-        return new ExtendibleHashIndex(dFile, bFile, dir, bucketCapacity);
+        return new ExtendibleHashIndex(dFile, bFile, HashDirectory.readFrom(dFile));
+    }
+
+    // volta ao estado inicial: profundidade global 1, dois buckets vazios
+    @Override
+    public void clear() throws IOException {
+        dirFile.setLength(0);
+        bucketFile.setLength(0);
+        directory.globalDepth = 1;
+        directory.bucketOffsets = new long[] {0, HashBucket.sizeInBytes(bucketCapacity)};
+        new HashBucket(bucketCapacity, 1).writeTo(bucketFile, directory.bucketOffsets[0]);
+        new HashBucket(bucketCapacity, 1).writeTo(bucketFile, directory.bucketOffsets[1]);
+        directory.writeTo(dirFile);
     }
 
     @Override
@@ -91,11 +90,11 @@ public class ExtendibleHashIndex implements Index<Integer> {
             bucket.insert(key, position);
             bucket.writeTo(bucketFile, bucketOffset);
         } else {
-            splitAndInsert(bucket, bucketOffset, dirIndex, key, position);
+            splitAndInsert(bucket, bucketOffset, key, position);
         }
     }
 
-    private void splitAndInsert(HashBucket bucket, long bucketOffset, int dirIndex, int newKey, long newPosition) throws IOException {
+    private void splitAndInsert(HashBucket bucket, long bucketOffset, int newKey, long newPosition) throws IOException {
         // Se a profundidade local é igual à global, duplica o diretório primeiro
         if (bucket.localDepth == directory.globalDepth) {
             directory.doubleDirectory();
@@ -121,14 +120,6 @@ public class ExtendibleHashIndex implements Index<Integer> {
             }
         }
 
-        // Tenta alocar a nova chave em um dos novos buckets
-        int newKeyHash = hash(newKey, newLocalDepth);
-        if (newKeyHash == hash(newKey, bucket.localDepth)) {
-            if (bucket0.count < bucketCapacity) bucket0.insert(newKey, newPosition);
-        } else {
-            if (bucket1.count < bucketCapacity) bucket1.insert(newKey, newPosition);
-        }
-
         // Grava no disco. O bucket0 reaproveita o espaço do bucket antigo. O bucket1 vai para o fim.
         long bucket1Offset = bucketFile.length();
         bucket0.writeTo(bucketFile, bucketOffset);
@@ -148,6 +139,10 @@ public class ExtendibleHashIndex implements Index<Integer> {
         }
         
         directory.writeTo(dirFile);
+
+        // reinsere a chave nova: se todas as chaves antigas caíram no mesmo bucket ele continua
+        // cheio, e o insert divide de novo (com profundidade maior) até sobrar espaço
+        insert(newKey, newPosition);
     }
 
     @Override

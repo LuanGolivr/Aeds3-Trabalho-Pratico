@@ -55,6 +55,13 @@ public class InvertedList {
         }
     }
 
+    // Apaga todos os termos e blocos (usado ao recarregar a base do zero)
+    public void clear() throws IOException {
+        dictionary.clear();
+        dictFile.setLength(0);
+        blockFile.setLength(0);
+    }
+
     // Normaliza o termo (tudo em minúsculo e sem espaços sobrando) para evitar duplicações
     private String normalize(String term) {
         return term.toLowerCase().trim();

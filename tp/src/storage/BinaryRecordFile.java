@@ -184,13 +184,22 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
     public void replaceAll(Iterator<T> records) throws IOException {
         this.file.setLength(0);
         this.file.seek(Header.SIZE_IN_BYTES);
+        // os offsets mudam todos: o índice é refeito junto com a reescrita
+        if (index != null) {
+            index.clear();
+        }
 
         int count = 0;
         while (records.hasNext()) {
-            byte[] data = records.next().toBytes();
+            T record = records.next();
+            byte[] data = record.toBytes();
+            long offset = this.file.getFilePointer();
             this.file.writeByte(' ');
             this.file.writeInt(data.length);
             this.file.write(data);
+            if (index != null) {
+                index.insert(record.id(), offset);
+            }
             count++;
         }
 
@@ -205,6 +214,9 @@ public class BinaryRecordFile<T extends Recordable> implements RecordFile<T> {
         this.header = new Header();
         this.file.seek(0);
         this.header.writeTo(this.file);
+        if (index != null) {
+            index.clear();
+        }
     }
 
     @Override
