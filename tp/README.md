@@ -6,7 +6,7 @@ CRUD de músicas do Spotify em arquivo binário, rodando no terminal, em Java, c
   intercalação polifásica);
 - **TP2** — índice primário em **Árvore B+** ou **Hashing Estendido** sobre o id, e **Lista
   Invertida** para busca por artista e por ano de lançamento;
-- **TP3** — **compressão** da base com **Huffman** e **LZW** (casamento de padrões em andamento).
+- **TP3** — **compressão** da base com **Huffman** e **LZW** e **casamento de padrões** com **KMP** e **Boyer-Moore-Horspool**.
 
 ## Como compilar e rodar
 
@@ -36,6 +36,7 @@ java -cp bin App
 | 8 | Busca por artista, por ano, ou composta (artista E ano) — Lista Invertida |
 | 9 | Comprime a base com Huffman e LZW, gerando uma nova versão X |
 | 10 | Descomprime a versão X e substitui a base por ela |
+| 11 | Busca por padrão em título, artista ou ambos usando KMP e Boyer-Moore-Horspool |
 | 0 | Sair |
 
 ## Dataset
@@ -57,7 +58,8 @@ src/
 ├── input/               # SongInputReader — leitura dos dados via terminal
 ├── sort/                # ordenação externa
 ├── index/               # Árvore B+, Hashing Estendido e Lista Invertida
-└── compression/         # Huffman, LZW e leitura/escrita de bits
+├── compression/         # Huffman, LZW e leitura/escrita de bits
+└── pattern/             # KMP, Boyer-Moore-Horspool e testes
 ```
 
 ## CRUD (opções 1-5)
@@ -179,6 +181,65 @@ O LZW ganha porque aproveita sequências repetidas (nomes de artistas, datas, ca
 fixo), enquanto o Huffman só aproveita a frequência de cada byte isolado. Os tempos variam a cada
 execução.
 
+## Casamento de padrões (opção 11)
+
+Os algoritmos de busca foram escritos em Java em `src/pattern/` e implementam
+`PatternMatcher`. **Não utilizam `String.contains`, `String.indexOf` nem expressões
+regulares** nas implementações. Os dois algoritmos escolhidos são diferentes de força bruta.
+
+### Como usar
+
+1. Carregue a base pelo menu **1** (se for solicitado, confirme a substituição com `s`).
+2. Selecione **11** e escolha o campo: **1** para títulos, **2** para artistas ou **3** para ambos.
+3. Digite um texto parcial, por exemplo `love` (título) ou `Taylor` (artista).
+4. O programa procura em **todos os registros ativos** do `songs.bin`, exibindo o número de
+   ocorrências, campos e músicas encontrados por algoritmo, o tempo de cada busca e até
+   **20 campos correspondentes** com as posições do padrão, começando em zero.
+
+O programa também verifica se os dois algoritmos encontraram exatamente as mesmas
+ocorrências. Para uma comparação justa, **a leitura do arquivo e a preparação do texto
+são realizadas uma só vez, antes da medição**, e cada algoritmo recebe os mesmos campos.
+As medições representam uma execução e podem variar com a JVM e o computador.
+
+As buscas **ignoram diferenças entre letras maiúsculas e minúsculas**, mas **respeitam os
+acentos**: `música` e `musica` são padrões distintos. As posições são medidas no texto
+normalizado para minúsculas; em casos raros de Unicode, a normalização pode alterar o
+número de caracteres, por isso a posição pode diferir da exibida no texto original.
+
+A opção 11 lê os registros por `RecordService.readAll()`, que desserializa as músicas
+armazenadas no arquivo binário e **desconsidera registros apagados** (marcados com lápide).
+A busca em artistas percorre cada nome separadamente, inclusive quando uma faixa possui
+vários artistas. O limite de 20 itens afeta somente a exibição, **não a contagem**.
+
+### Escolha dos algoritmos de casamento de padrões e justificativa
+
+Para o TP3, foram escolhidos **Knuth-Morris-Pratt (KMP)** e
+**Boyer-Moore-Horspool (BMH)**. Ambos são algoritmos de casamento de padrões
+**diferentes da força bruta**, conforme a exigência do trabalho. A escolha permite
+comparar duas estratégias: uma que evita repetir comparações por meio da estrutura
+do padrão (KMP) e outra que procura avançar várias posições de cada vez no texto
+(BMH). Os dois foram implementados pelo grupo em Java e são utilizados na opção
+**11** do menu para pesquisar títulos e nomes de artistas.
+
+#### 1. Knuth-Morris-Pratt (KMP) — `src/pattern/KmpMatcher.java`
+
+O KMP foi escolhido por apresentar **desempenho previsível**, inclusive quando o
+padrão contém muitas repetições de caracteres. Antes da busca, ele constrói um
+vetor **LPS** (*Longest Proper Prefix which is also Suffix*). Em cada posição,
+esse vetor armazena o tamanho do maior prefixo próprio do padrão que também é
+sufixo do trecho já examinado. Quando ocorre uma divergência, o algoritmo usa o
+LPS para continuar de uma posição que aproveita as comparações anteriores, sem
+retroceder no texto nem recomeçar a análise do padrão do zero.
+
+#### 2. Boyer-Moore-Horspool (BMH) — `src/pattern/BoyerMooreHorspoolMatcher.java`
+
+O BMH foi escolhido para representar uma estratégia diferente: ele compara o
+padrão **da direita para a esquerda** e utiliza uma **tabela de deslocamentos**,
+preparada antes da busca, para determinar quanto a janela de comparação pode
+avançar quando há correspondência ou divergência. Em situações favoráveis, isso
+permite ignorar posições intermediárias e realizar menos comparações que uma
+busca que avança sempre um caractere.
+
 ## Testes
 
 Não há framework de teste no projeto; cada teste é uma classe executável que falha com
@@ -188,6 +249,7 @@ Não há framework de teste no projeto; cada teste é uma classe executável que
 java -cp bin index.BPlusTreeIndexSelfTest           # inserção, busca e remoção na B+
 java -cp bin RegressionSelfTest                     # hash, índice após ordenação, listas ao recarregar
 java -cp bin compression.CompressionSelfTest files/songs.bin   # ida e volta de Huffman e LZW
+java -cp bin pattern.PatternMatchingSelfTest            # casos normais, sobrepostos, Unicode e aleatórios
 ```
 
 `CompressionSelfTest` cobre entrada vazia, 1 byte, byte repetido, os 256 valores, o caso especial

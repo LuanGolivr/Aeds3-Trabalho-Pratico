@@ -9,12 +9,19 @@ import interfaces.Index;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 import model.Song;
+import pattern.BoyerMooreHorspoolMatcher;
+import pattern.KmpMatcher;
+import pattern.PatternMatcher;
 import service.RecordService;
 import sort.ExternalSort;
 import sort.Tape;
@@ -68,6 +75,7 @@ public class App {
         "8 - Buscar por atributos (Lista Invertida)",
         "9 - Comprimir base de dados (Huffman e LZW)",
         "10 - Descomprimir base de dados (versão X)",
+        "11 - Buscar padrão em títulos/artistas (KMP e BMH)",
         "0 - Sair do programa",
     };
 
@@ -108,6 +116,9 @@ public class App {
                     break;
                 case 10:
                     decompressDatabase();
+                    break;
+                case 11:
+                    searchByPattern();
                     break;
                 case 0:
                     System.out.println("Finalizando programa....");
@@ -397,6 +408,139 @@ public class App {
             }
         }
         System.out.println("--------------------------------------------------");
+    }
+
+    // ---------------------------------------------------------------- casamento de padrões (TP3)
+
+    // Representa um campo textual vindo de um registro ativo do songs.bin.
+    // O texto já vem normalizado para que os tempos meçam apenas as buscas.
+    private record SearchField(int songId, String songTitle, String fieldName, String normalizedText) { }
+
+    // Armazena todas as posições encontradas em determinado campo da música.
+    private record SearchHit(SearchField field, List<Integer> positions) { }
+
+    /**
+     * Percorre os registros válidos do arquivo binário e pesquisa um padrão em
+     * títulos, artistas ou ambos. KMP e BMH recebem exatamente os mesmos dados,
+     * permitindo comparar tempo e verificar se retornam os mesmos resultados.
+     */
+    private static void searchByPattern() throws IOException {
+        System.out.println("\n--- Casamento de Padrões (TP3) ---");
+        System.out.println("1 - Títulos das músicas");
+        System.out.println("2 - Nomes dos artistas");
+        System.out.println("3 - Títulos e artistas");
+        System.out.print("Escolha o campo a pesquisar: ");
+        int choice = scanner.nextInt();
+        scanner.nextLine(); // consome a quebra de linha deixada por nextInt()
+
+        if (choice < 1 || choice > 3) {
+            System.out.println("Campo inválido.");
+            return;
+        }
+        System.out.print("Digite o padrão a procurar: ");
+        String pattern = scanner.nextLine();
+        if (pattern.isBlank()) {
+            System.out.println("O padrão não pode ser vazio.");
+            return;
+        }
+
+        // Carrega a base apenas uma vez e ignora automaticamente os registros
+        // com lápide, pois readAll() devolve somente registros ativos.
+        List<Song> songs = service.readAll();
+        if (songs.isEmpty()) {
+            System.out.println("A base não possui músicas. Use a opção 1 para carregá-la.");
+            return;
+        }
+
+        // A comparação não diferencia maiúsculas de minúsculas. Acentos são
+        // mantidos: "musica" e "música" continuam sendo textos diferentes.
+        String normalizedPattern = pattern.toLowerCase(Locale.ROOT);
+        List<SearchField> fields = new ArrayList<>();
+        for (Song song : songs) {
+            if (choice == 1 || choice == 3) {
+                fields.add(new SearchField(song.id(), song.trackName(), "título",
+                        song.trackName().toLowerCase(Locale.ROOT)));
+            }
+            if (choice == 2 || choice == 3) {
+                for (String artist : song.getArtistsName()) {
+                    fields.add(new SearchField(song.id(), song.trackName(), "artista: " + artist,
+                            artist.toLowerCase(Locale.ROOT)));
+                }
+            }
+        }
+
+        PatternMatcher[] matchers = {
+            new KmpMatcher(normalizedPattern),
+            new BoyerMooreHorspoolMatcher(normalizedPattern)
+        };
+        List<SearchHit> firstResult = null;
+        long[] times = new long[matchers.length];
+        boolean equal = true;
+
+        System.out.printf("Pesquisando %d campo(s) de %d música(s) ativa(s).%n", fields.size(), songs.size());
+        for (int i = 0; i < matchers.length; i++) {
+            PatternMatcher matcher = matchers[i];
+            long start = System.nanoTime();
+            List<SearchHit> hits = findPatternHits(fields, matcher);
+            times[i] = System.nanoTime() - start;
+
+            int occurrences = 0;
+            Set<Integer> songIds = new HashSet<>();
+            for (SearchHit hit : hits) {
+                occurrences += hit.positions().size();
+                songIds.add(hit.field().songId());
+            }
+            System.out.printf("  %-20s %d ocorrência(s) em %d campo(s) e %d música(s) | %.3f ms%n",
+                    matcher.name(), occurrences, hits.size(), songIds.size(), times[i] / 1e6);
+
+            if (firstResult == null) {
+                firstResult = hits;
+            } else if (!firstResult.equals(hits)) {
+                equal = false;
+            }
+        }
+
+        // Se a implementação dos dois algoritmos divergir, não apresenta
+        // resultados como se estivessem validados.
+        if (!equal) {
+            System.out.println("ATENÇÃO: os algoritmos produziram resultados diferentes.");
+            return;
+        }
+
+        System.out.println("Resultados conferidos: KMP e BMH encontraram as mesmas ocorrências.");
+        if (firstResult.isEmpty()) {
+            System.out.println("Nenhuma ocorrência encontrada para: " + pattern);
+        } else {
+            final int limit = 20; // evita imprimir centenas de músicas de uma vez
+            System.out.println("Exibindo até " + limit + " campo(s) com ocorrências:");
+            for (int i = 0; i < Math.min(limit, firstResult.size()); i++) {
+                SearchHit hit = firstResult.get(i);
+                System.out.printf("  ID %d | %s | %s | posições: %s%n",
+                        hit.field().songId(), hit.field().songTitle(),
+                        hit.field().fieldName(), hit.positions());
+            }
+            if (firstResult.size() > limit) {
+                System.out.println("  ... mais " + (firstResult.size() - limit) + " campo(s) encontrados.");
+            }
+        }
+        int fastest = indexOfMin(times);
+        System.out.printf("Mais rápido nesta execução: %s (%.3f ms).%n",
+                matchers[fastest].name(), times[fastest] / 1e6);
+        System.out.println("Tempos medem apenas a busca, sem leitura do arquivo e normalização."
+                + " As posições começam em zero no texto normalizado.");
+    }
+
+    // Busca em todos os campos usando apenas o algoritmo selecionado.
+    // Guarda tanto o campo original quanto as posições, incluindo sobreposições.
+    private static List<SearchHit> findPatternHits(List<SearchField> fields, PatternMatcher matcher) {
+        List<SearchHit> hits = new ArrayList<>();
+        for (SearchField field : fields) {
+            List<Integer> positions = matcher.findAll(field.normalizedText());
+            if (!positions.isEmpty()) {
+                hits.add(new SearchHit(field, positions));
+            }
+        }
+        return hits;
     }
 
     // ---------------------------------------------------------------- compressão (TP3)
